@@ -124,6 +124,34 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.mainFrame_ui.actionOpen_Fold.triggered.connect(self.open_directory)
 
+        # Connect double-click signal to handler
+        self.tree_view.doubleClicked.connect(self.file_double_clicked)
+
+    def file_double_clicked(self, index):
+        """Handle double-click event on a file in the QTreeView."""
+        file_path = self.file_model.filePath(index)
+
+        if self.file_model.isDir(index):
+            PRINT_("Double-clicked directory:", file_path)
+            # Handle directory (e.g., open it, show contents, etc.)
+        else:
+            PRINT_("Double-clicked file:", file_path)
+            try:
+                with open(file_path, "r", encoding="utf-8") as file:
+                    while True:
+                        line = file.readline()  # 한 줄씩 읽기
+                        if not line:
+                            break  # 더 이상 읽을 줄이 없으면 종료
+                        cleaned_sentence = ANSI_ESCAPE.sub('', line)
+                        print(cleaned_sentence)  # 각 줄을 처리
+                        
+            except FileNotFoundError:
+                PRINT_("Error: The file was not found.")
+            except PermissionError:
+                PRINT_("Error: Permission denied.")
+            except Exception as e:
+                PRINT_(f"An unexpected error occurred: {e}")
+
     def explore_window_ctrl(self, always_show=False):
         if always_show:
             self.mainFrame_ui.explorer_frame.show()
