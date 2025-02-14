@@ -72,45 +72,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.setWindowTitle(Version)
 
-    @staticmethod
-    def find_and_stop_qthreads():
-        app = QApplication.instance()
-        if app:
-            for widget in app.allWidgets():
-                if isinstance(widget, QThread) and widget is not QThread.currentThread():
-                    PRINT_(f"Stopping QThread: {widget}")
-                    widget.quit()
-                    widget.wait()
-
-        # QObject 트리에서 QThread 찾기
-        for obj in QObject.children(QApplication.instance()):
-            if isinstance(obj, QThread) and obj is not QThread.currentThread():
-                PRINT_(f"Stopping QThread: {obj}")
-                obj.quit()
-                obj.wait()
-
-    @staticmethod
-    def stop_all_threads():
-        current_thread = threading.current_thread()
-
-        for thread in threading.enumerate():
-            if thread is current_thread:  # 현재 실행 중인 main 스레드는 제외
-                continue
-
-            if isinstance(thread, threading._DummyThread):  # 더미 스레드는 제외
-                PRINT_(f"Skipping DummyThread: {thread.name}")
-                continue
-
-            PRINT_(f"Stopping Thread: {thread.name}")
-
-            if hasattr(thread, "stop"):  # stop() 메서드가 있으면 호출
-                thread.stop()
-            elif hasattr(thread, "terminate"):  # terminate() 메서드가 있으면 호출
-                thread.terminate()
-
-            if thread.is_alive():
-                thread.join(timeout=1)  # 1초 기다린 후 종료
-
     def closeEvent(self, event):
         answer = QtWidgets.QMessageBox.question(self,
                                                 "Confirm Exit...",
@@ -118,9 +79,10 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
 
         if answer == QtWidgets.QMessageBox.Yes:
+            find_and_stop_qthreads()
+            stop_all_threads()
+
             event.accept()
-            self.find_and_stop_qthreads()
-            self.stop_all_threads()
         else:
             event.ignore()
 
@@ -141,6 +103,14 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     def cleanLogBrowser(self):
         self.mainFrame_ui.logtextbrowser.clear()
+
+    def log_browser_ctrl(self):
+        sender = self.sender()
+        if sender:
+            if sender.objectName() == "actionOff":
+                self.mainFrame_ui.logtextbrowser.hide()
+            else:
+                self.mainFrame_ui.logtextbrowser.show()
 
     def connectSlotSignal(self):
         """ sys.stdout redirection """
@@ -166,14 +136,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         else:
             self.mainFrame_ui.explorer_frame.show()
             self.mainFrame_ui.explore_pushButton.setText("Hide")
-
-    def log_browser_ctrl(self):
-        sender = self.sender()
-        if sender:
-            if sender.objectName() == "actionOff":
-                self.mainFrame_ui.logtextbrowser.hide()
-            else:
-                self.mainFrame_ui.logtextbrowser.show()
 
     def finished_open_dir(self):
         if self.t_open_dir_instance is not None:

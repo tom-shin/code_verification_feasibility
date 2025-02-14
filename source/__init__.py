@@ -674,3 +674,42 @@ class OpenDir_WorkerThread(QThread):
         self.running = False
         self.quit()
         self.wait(3000)
+
+
+def find_and_stop_qthreads():
+    app = QApplication.instance()
+    if app:
+        for widget in app.allWidgets():
+            if isinstance(widget, QThread) and widget is not QThread.currentThread():
+                PRINT_(f"Stopping QThread: {widget}")
+                widget.quit()
+                widget.wait()
+
+    # QObject 트리에서 QThread 찾기
+    for obj in QObject.children(QApplication.instance()):
+        if isinstance(obj, QThread) and obj is not QThread.currentThread():
+            PRINT_(f"Stopping QThread: {obj}")
+            obj.quit()
+            obj.wait()
+
+
+def stop_all_threads():
+    current_thread = threading.current_thread()
+
+    for thread in threading.enumerate():
+        if thread is current_thread:  # 현재 실행 중인 main 스레드는 제외
+            continue
+
+        if isinstance(thread, threading._DummyThread):  # 더미 스레드는 제외
+            PRINT_(f"Skipping DummyThread: {thread.name}")
+            continue
+
+        PRINT_(f"Stopping Thread: {thread.name}")
+
+        if hasattr(thread, "stop"):  # stop() 메서드가 있으면 호출
+            thread.stop()
+        elif hasattr(thread, "terminate"):  # terminate() 메서드가 있으면 호출
+            thread.terminate()
+
+        if thread.is_alive():
+            thread.join(timeout=1)  # 1초 기다린 후 종료
