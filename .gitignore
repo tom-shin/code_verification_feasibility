@@ -18,6 +18,7 @@ Thumbs.db
 
 # Test resutl 폴더
 Result
+test*
 
 # Git ignore 파일
 #.gitignore

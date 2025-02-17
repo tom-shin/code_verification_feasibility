@@ -47,6 +47,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.mainFrame_ui.explore_pushButton.setText("Show")
 
         self.setupGPTModels()
+        self.setDefaultPrompt()
 
         # 탐색기 뷰 추가
         if self.tree_view is None:
@@ -143,7 +144,9 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             radio_button.clicked.connect(self.getSelectedModel)
             row += 1  # 행 번호 증가
 
-        self.getSelectedModel()
+    def setDefaultPrompt(self):
+        prompt = "\n".join(keyword["pre_prompt"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
+        self.mainFrame_ui.logtextbrowser.setText(prompt)
 
     def getSelectedModel(self):
         # 선택된 라디오 버튼이 무엇인지 확인

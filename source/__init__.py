@@ -45,7 +45,14 @@ keyword = {
     "test_model": ["onnx"],
     "error_keyword": ["Error Code:", "Error code:", "Error msg:"],
     "exclusive_dir": ["DATA", "recipe", "yolox_darknet", "etc"],
-    "gpt_models": ["gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+    "gpt_models": ["gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+    "pre_prompt": [
+        "The above is a summary of each part of the project, including file names and paths. "
+        "Based on this, analyze the overall structure, relationships between files, code quality, "
+        "and identify any issues or bugs in the code. "
+        "Also, suggest improvements and provide example code improvements.\n\n"
+        "Please provide the analysis and improvement suggestions in Korean"
+    ]
 }
 
 # ANSI 코드 정규식 패턴 (터미널 컬러 코드)
