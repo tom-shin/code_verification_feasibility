@@ -19,7 +19,7 @@ from collections import OrderedDict
 from datetime import datetime
 
 from PyQt5 import QtCore, QtWidgets, QtGui
-from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QThread, QObject
+from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QThread, QObject, QModelIndex
 from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar, QPushButton, QHBoxLayout, QSpacerItem, \
     QSizePolicy, QRadioButton, QWidget, QMessageBox, QFileDialog, QApplication, QFileSystemModel
@@ -38,13 +38,14 @@ def PRINT_(*args):
         logging.info(args)
 
 
-Version = "Feasibility for Code Verification 0.0.1 (made by tom.shin)"
+Version = "Feasibility for Code Verification 0.0.2 (made by tom.shin)"
 
 keyword = {
     "element_1": [""],
     "test_model": ["onnx"],
     "error_keyword": ["Error Code:", "Error code:", "Error msg:"],
-    "exclusive_dir": ["DATA", "recipe", "yolox_darknet", "etc"]
+    "exclusive_dir": ["DATA", "recipe", "yolox_darknet", "etc"],
+    "gpt_models": ["gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
 }
 
 # ANSI 코드 정규식 패턴 (터미널 컬러 코드)

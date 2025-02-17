@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 from source.__init__ import *
 
 if getattr(sys, 'frozen', False):
@@ -32,7 +31,8 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.tree_view = None
         self.file_model = None
         self.work_progress = None
-        self.t_open_dir_instance = None
+
+        self.llm_radio_buttons = []  # 라디오 버튼을 저장할 리스트
         """ for main frame & widget """
         self.mainFrame_ui = None
         self.widget_ui = None
@@ -46,10 +46,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.mainFrame_ui.explorer_frame.hide()
         self.mainFrame_ui.explore_pushButton.setText("Show")
 
+        self.setupGPTModels()
+
         # 탐색기 뷰 추가
         if self.tree_view is None:
             self.file_model = QFileSystemModel()
-            self.file_model.setRootPath(QtCore.QDir.rootPath())  # 초기 루트 경로 설정
 
             self.tree_view = QtWidgets.QTreeView()
             self.tree_view.setModel(self.file_model)
@@ -114,7 +115,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     def connectSlotSignal(self):
         """ sys.stdout redirection """
-        sys.stdout = EmittingStream(textWritten=self.normalOutputWritten)
+        # sys.stdout = EmittingStream(textWritten=self.normalOutputWritten)
         self.mainFrame_ui.log_clear_pushButton.clicked.connect(self.cleanLogBrowser)
 
         self.mainFrame_ui.actionOn.triggered.connect(self.log_browser_ctrl)
@@ -124,33 +125,56 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.mainFrame_ui.actionOpen_Fold.triggered.connect(self.open_directory)
 
+        self.mainFrame_ui.analyze_pushButton.clicked.connect(self.start_analyze)
+
+        self.mainFrame_ui.deselectpushButton.clicked.connect(self.deselect_file_dir)
+
         # Connect double-click signal to handler
-        self.tree_view.doubleClicked.connect(self.file_double_clicked)
+        # self.tree_view.doubleClicked.connect(self.file_double_clicked)
 
-    def file_double_clicked(self, index):
-        """Handle double-click event on a file in the QTreeView."""
-        file_path = self.file_model.filePath(index)
+    def setupGPTModels(self):
+        row = 0  # 그리드 레이아웃의 첫 번째 행
+        for index, name in enumerate(keyword["gpt_models"]):
+            radio_button = QRadioButton(name)  # 라디오 버튼 생성
+            if index == 0:  # 첫 번째 요소는 기본적으로 체크되도록 설정
+                radio_button.setChecked(True)
+            self.mainFrame_ui.modelgridLayout.addWidget(radio_button, row, 0)  # 그리드 레이아웃에 추가
+            self.llm_radio_buttons.append(radio_button)
+            radio_button.clicked.connect(self.getSelectedModel)
+            row += 1  # 행 번호 증가
 
-        if self.file_model.isDir(index):
-            PRINT_("Double-clicked directory:", file_path)
-            # Handle directory (e.g., open it, show contents, etc.)
-        else:
-            PRINT_("Double-clicked file:", file_path)
-            try:
-                with open(file_path, "r", encoding="utf-8") as file:
-                    while True:
-                        line = file.readline()  # 한 줄씩 읽기
-                        if not line:
-                            break  # 더 이상 읽을 줄이 없으면 종료
-                        cleaned_sentence = ANSI_ESCAPE.sub('', line)
-                        print(cleaned_sentence)  # 각 줄을 처리
-                        
-            except FileNotFoundError:
-                PRINT_("Error: The file was not found.")
-            except PermissionError:
-                PRINT_("Error: Permission denied.")
-            except Exception as e:
-                PRINT_(f"An unexpected error occurred: {e}")
+        self.getSelectedModel()
+
+    def getSelectedModel(self):
+        # 선택된 라디오 버튼이 무엇인지 확인
+        for radio_button in self.llm_radio_buttons:
+            if radio_button.isChecked():  # 선택된 버튼을 확인
+                print(f"Selected GPT model: {radio_button.text()}")  # 선택된 버튼의 텍스트 출력
+
+    # def file_double_clicked(self, index):
+    #     """Handle double-click event on a file in the QTreeView."""
+    #     file_path = self.file_model.filePath(index)
+    #
+    #     if self.file_model.isDir(index):
+    #         PRINT_("Double-clicked directory:", file_path)
+    #         # Handle directory (e.g., open it, show contents, etc.)
+    #     else:
+    #         PRINT_("Double-clicked file:", file_path)
+    #         try:
+    #             with open(file_path, "r", encoding="utf-8") as file:
+    #                 while True:
+    #                     line = file.readline()  # 한 줄씩 읽기
+    #                     if not line:
+    #                         break  # 더 이상 읽을 줄이 없으면 종료
+    #                     cleaned_sentence = ANSI_ESCAPE.sub('', line)
+    #                     print(cleaned_sentence)  # 각 줄을 처리
+    #
+    #         except FileNotFoundError:
+    #             PRINT_("Error: The file was not found.")
+    #         except PermissionError:
+    #             PRINT_("Error: Permission denied.")
+    #         except Exception as e:
+    #             PRINT_(f"An unexpected error occurred: {e}")
 
     def explore_window_ctrl(self, always_show=False):
         if always_show:
@@ -166,9 +190,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             self.mainFrame_ui.explore_pushButton.setText("Hide")
 
     def finished_open_dir(self):
-        if self.t_open_dir_instance is not None:
-            self.t_open_dir_instance.stop()
-
         if self.work_progress is not None:
             self.work_progress.close()
 
@@ -185,12 +206,12 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         if not m_dir:
             return
 
-        PRINT_("Open: ", m_dir)
+        # PRINT_("Open: ", m_dir)
 
-        self.t_open_dir_instance = OpenDir_WorkerThread(dirPath=m_dir)
-        self.t_open_dir_instance.finished_open_dir_sig.connect(self.finished_open_dir)
+        self.deselect_file_dir()
 
         # 선택한 폴더를 탐색기에서 갱신
+        self.file_model.setRootPath(m_dir)  # 초기 루트 경로 설정
         self.tree_view.setRootIndex(self.file_model.index(m_dir))
         self.ctrl_meta_info(show=True)
 
@@ -200,8 +221,20 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.explore_window_ctrl(always_show=True)
 
+    def deselect_file_dir(self):
+        PRINT_(f"Deselected file/folder")
+
+        # 기존 선택 초기화
+        self.tree_view.clearSelection()  # 기존 선택된 항목 해제
+        self.tree_view.setCurrentIndex(QModelIndex())  # 현재 인덱스 초기화
+
     def start_analyze(self):
-        pass
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            file_path = self.file_model.filePath(selected_indexes[0])
+            PRINT_(f"Selected file/folder: {file_path}")
+        else:
+            PRINT_("No file or folder selected.")
 
     def check_all_scenario(self):
         sender = self.sender()
