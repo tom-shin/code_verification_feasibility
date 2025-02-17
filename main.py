@@ -55,8 +55,9 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
             self.tree_view = QtWidgets.QTreeView()
             self.tree_view.setModel(self.file_model)
-            self.tree_view.setRootIndex(self.file_model.index(QtCore.QDir.rootPath()))
-            self.tree_view.setHeaderHidden(True)  # 헤더 감추기
+            # 초기화 시 루트를 설정하지 않음
+            self.tree_view.setHeaderHidden(False)  # 헤더는 보이게 설정
+            # self.tree_view.setRootIndex(self.file_model.index(QtCore.QDir.rootPath()))  # 루트 경로 설정을 하지 않음
 
             # 가로 스크롤바 항상 보이도록 설정
             self.tree_view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
@@ -73,6 +74,36 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             self.mainFrame_ui.explorer_scrollArea.setWidget(self.tree_view)
 
         self.setWindowTitle(Version)
+
+    def open_directory(self):
+
+        m_dir = QFileDialog.getExistingDirectory(self, "Select Directory")
+
+        if not m_dir:
+            return
+
+        # PRINT_("Open: ", m_dir)
+
+        # self.deselect_file_dir()
+        self.tree_view.clearSelection()  # 기존 선택된 항목 해제
+        self.tree_view.setCurrentIndex(QModelIndex())  # 현재 인덱스 초기화
+
+        # 선택한 폴더를 탐색기에서 갱신
+        self.file_model.setRootPath(m_dir)  # 초기 루트 경로 설정
+        index = self.file_model.index(m_dir)  # m_dir의 인덱스를 가져옴
+
+        # 선택한 폴더가 유효한지 확인
+        if index.isValid():
+            self.tree_view.setRootIndex(index)  # 선택한 폴더를 루트로 설정
+            self.ctrl_meta_info(show=True)
+
+            # 기존에 explorer_verticalLayout에 추가된 경우 다시 추가하지 않음
+            if self.tree_view.parent() is None:
+                self.mainFrame_ui.explorer_verticalLayout.addWidget(self.tree_view)
+
+            self.explore_window_ctrl(always_show=True)
+        else:
+            print("Error: Invalid directory index.")
 
     def closeEvent(self, event):
         answer = QtWidgets.QMessageBox.question(self,
@@ -202,27 +233,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             self.tree_view.setColumnHidden(1, True)  # 크기 숨김
             self.tree_view.setColumnHidden(2, True)  # 형식 숨김
             self.tree_view.setColumnHidden(3, True)  # 날짜 숨김
-
-    def open_directory(self):
-        m_dir = QFileDialog.getExistingDirectory(self, "Select Directory")
-
-        if not m_dir:
-            return
-
-        # PRINT_("Open: ", m_dir)
-
-        self.deselect_file_dir()
-
-        # 선택한 폴더를 탐색기에서 갱신
-        self.file_model.setRootPath(m_dir)  # 초기 루트 경로 설정
-        self.tree_view.setRootIndex(self.file_model.index(m_dir))
-        self.ctrl_meta_info(show=True)
-
-        # 기존에 explorer_verticalLayout에 추가된 경우 다시 추가하지 않음
-        if self.tree_view.parent() is None:
-            self.mainFrame_ui.explorer_verticalLayout.addWidget(self.tree_view)
-
-        self.explore_window_ctrl(always_show=True)
 
     def deselect_file_dir(self):
         PRINT_(f"Deselected file/folder")
