@@ -123,7 +123,7 @@ class default_source_class(QObject):
     def finish_insert_widget_progress_status(self):
         if self.progressBar is not None:
             self.progressBar.close()
-            print(f"총 테스트 할 OP 갯수: {len(self.added_scenario_widgets)}")
+            PRINT_(f"총 테스트 할 OP 갯수: {len(self.added_scenario_widgets)}")
 
     def update_test_result(self, output_result, sub_widget, executed_cnt):
 

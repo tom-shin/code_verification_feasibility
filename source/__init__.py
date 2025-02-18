@@ -44,7 +44,7 @@ keyword = {
     "element_1": [""],
     "test_model": ["onnx"],
     "error_keyword": ["Error Code:", "Error code:", "Error msg:"],
-    "exclusive_dir": ["DATA", "recipe", "yolox_darknet", "etc"],
+    "exclusive_dir": [".git", ".idea", "pycache"],
     "gpt_models": ["gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
     "pre_prompt": [
         "The above is a summary of each part of the project, including file names and paths. "
@@ -60,12 +60,14 @@ ANSI_ESCAPE = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
 
 class ProgressDialog(QDialog):  # This class will handle both modal and non-modal dialogs
-    send_user_close_event = pyqtSignal(bool)
+    send_user_close_event = pyqtSignal()
 
-    def __init__(self, message, modal=True, show=False, parent=None):
+    def __init__(self, message, modal=True, show=False, parent=None, unknown_max_limit=False):
         super().__init__(parent)
 
         self.setWindowTitle(message)
+
+        self.unknown_max_limit = unknown_max_limit
 
         # Set the dialog as modal or non-modal based on the 'modal' argument
         if modal:
@@ -75,12 +77,12 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
 
         self.resize(700, 100)  # Resize to desired dimensions
 
+        self.max_cnt = 100
         self.progress_bar = QProgressBar(self)
-        self.progress_bar.setMaximum(int(100))
+        self.progress_bar.setMaximum(int(self.max_cnt))
 
         self.label = QLabel("", self)
         self.close_button = QPushButton("Close", self)
-        self.radio_button = QRadioButton("", self)
 
         # Create a horizontal layout for the close button and spacer
         h_layout = QHBoxLayout()
@@ -92,7 +94,11 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
         layout = QVBoxLayout(self)
         layout.addWidget(self.progress_bar)
         layout.addWidget(self.label)
-        layout.addWidget(self.radio_button)
+
+        if not self.unknown_max_limit:
+            self.radio_button = QRadioButton("", self)
+            layout.addWidget(self.radio_button)
+
         layout.addLayout(h_layout)
         self.setLayout(layout)
 
@@ -107,10 +113,18 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
 
         # Timer to toggle radio button every 500ms
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.toggle_radio_button)
-        self.timer.start(500)  # 500ms interval
 
         self.radio_state = False  # Initial blink state
+
+        if self.unknown_max_limit:
+            # Remove the progress bar format (e.g., "%" sign)
+            self.progress_bar.setFormat("")  # No percentage displayed
+            self.cnt = 0
+            self.timer.timeout.connect(self.unknown_progress)
+            self.timer.start(100)  # 500ms interval
+        else:
+            self.timer.timeout.connect(self.toggle_radio_button)
+            self.timer.start(500)  # 500ms interval
 
     def setProgressBarMaximum(self, max_value):
         self.progress_bar.setMaximum(int(max_value))
@@ -128,8 +142,14 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
             self.show()  # Show as non-modal
 
     def closeEvent(self, event):
-        self.send_user_close_event.emit(True)
+        self.send_user_close_event.emit()
         event.accept()
+
+    def unknown_progress(self):
+        self.cnt += 1
+        if self.cnt >= 99:
+            self.cnt = 0
+        self.onCountChanged(value=self.cnt)
 
     def toggle_radio_button(self):
         if self.radio_state:
@@ -462,14 +482,14 @@ def user_subprocess(cmd=None, run_time=False, timeout=None, log=True, shell=True
 
         except subprocess.TimeoutExpired:
             if log:
-                print("Timeout occurred, command terminated.")
+                PRINT_("Timeout occurred, command terminated.")
             error_output.append("Command terminated due to timeout.")
             timeout_expired = True
 
         except Exception as e:
             # 기타 예외 처리 추가
             if log:
-                print(f"subprocess Command exception failed:")
+                PRINT_(f"subprocess Command exception failed:")
             error_output.append(f"subprocess Command exception failed:")
 
     return line_output, error_output, timeout_expired
@@ -665,18 +685,85 @@ def get_mac_address():
 
 
 # /////////////////////////////////////////////////////////////////////////////////////////
-class OpenDir_WorkerThread(QThread):
-    finished_open_dir_sig = pyqtSignal()  # ret, failed_pairs, memory_profile 전달
+class LoadDir_Thread(QThread):
+    finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
 
-    def __init__(self, dirPath):
+    def __init__(self, m_source_dir, base_dir):
         super().__init__()
         self.running = True
-        self.dirPath = dirPath.replace("\\", "/")
+
+        self.src_dir = m_source_dir.replace("\\", "/")
+
+        unique_id = str(uuid.uuid4())  # 고유한 UUID 생성
+        self.target_dir = os.path.join(base_dir, f"root_temp_{unique_id}", os.path.basename(self.src_dir)).replace("\\",
+                                                                                                                   "/")
+
+        self.cleanup_root_temp_folders(base_dir=base_dir)
+
+    @staticmethod
+    def cleanup_root_temp_folders(base_dir):
+        """temp_dir 내에서 root_temp_로 시작하는 모든 폴더를 삭제합니다."""
+        for root, dirs, files in os.walk(base_dir, topdown=False):
+            for dir_name in dirs:
+                # 'root_temp_'로 시작하는 폴더를 찾기
+                if dir_name.startswith("root_temp_"):
+                    dir_path = os.path.join(root, dir_name)
+                    PRINT_(f"Deleting folder: {dir_path}")  # 삭제하려는 폴더 경로 출력
+                    shutil.rmtree(dir_path)  # 해당 폴더 및 그 하위 항목 삭제
 
     def run(self) -> None:
         # 코드 작성
+        self.copy_directory_structure_2()
 
-        self.finished_open_dir_sig.emit()
+        self.finished_load_project_sig.emit(os.path.dirname(self.target_dir))
+
+    def copy_directory_structure_1(self):
+        if os.path.exists(self.target_dir):
+            shutil.rmtree(self.target_dir)
+
+        shutil.copytree(self.src_dir, self.target_dir)
+
+    def copy_directory_structure_2(self):
+        CheckDir(dir_=self.target_dir)
+
+        cnt = 0
+        exclusive_list = keyword["exclusive_dir"]  # 제외할 단어들 리스트
+
+        # src_dir의 모든 파일과 폴더를 재귀적으로 복사
+        for root, dirs, files in os.walk(self.src_dir):
+            if not self.running:
+                print("force termination_main loop")
+                break
+
+            # 현재 폴더명이 exclusive_list에 포함된 단어를 포함하는지 체크
+            if any(excluded_word in os.path.basename(root) for excluded_word in exclusive_list):
+                continue  # 제외할 단어가 있으면 해당 폴더는 건너뜀
+
+            # dirs에서 제외할 폴더를 제거
+            dirs[:] = [d for d in dirs if not any(excluded_word in d for excluded_word in exclusive_list)]
+
+            # 현재 폴더의 상대 경로를 target_dir에 맞게 계산
+            relative_path = os.path.relpath(root, self.src_dir).replace("\\", "/")
+            destination_dir = os.path.join(self.target_dir, relative_path).replace("\\", "/")
+
+            if not os.path.exists(destination_dir):
+                os.makedirs(destination_dir)
+
+            # 현재 폴더 내의 모든 파일을 복사
+            for file in files:
+                if not self.running:
+                    print("force termination_sub_loop")
+                    break
+
+                # 파일명이 exclusive_list에 포함된 단어를 포함하는지 체크
+                if any(excluded_word in file for excluded_word in exclusive_list):
+                    continue  # 제외할 단어가 있으면 해당 파일은 건너뜀
+
+                source_file = os.path.join(root, file).replace("\\", "/")
+                destination_file = os.path.join(destination_dir, file).replace("\\", "/")
+                shutil.copy2(source_file, destination_file)  # 메타데이터 포함하여 복사
+                cnt += 1
+                PRINT_(cnt)
 
     def stop(self):
         self.running = False

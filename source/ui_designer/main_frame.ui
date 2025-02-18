@@ -86,7 +86,7 @@
          </property>
          <widget class="QWidget" name="tab_2">
           <attribute name="title">
-           <string>Execute Verification</string>
+           <string>Result Screen</string>
           </attribute>
           <layout class="QGridLayout" name="gridLayout">
            <item row="2" column="0">
@@ -170,7 +170,7 @@
          </widget>
          <widget class="QWidget" name="tab">
           <attribute name="title">
-           <string>AI-Studio Image History</string>
+           <string>Reserved</string>
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_3">
            <item>
@@ -345,13 +345,6 @@
      <height>21</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menuBrowser">
-    <property name="title">
-     <string>Log Browser Ctrl.</string>
-    </property>
-    <addaction name="actionOn"/>
-    <addaction name="actionOff"/>
-   </widget>
    <widget class="QMenu" name="menuFile">
     <property name="title">
      <string>File</string>
@@ -360,7 +353,6 @@
     <addaction name="actionOpen_Fold"/>
    </widget>
    <addaction name="menuFile"/>
-   <addaction name="menuBrowser"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <action name="actionOn">

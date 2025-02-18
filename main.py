@@ -28,6 +28,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.t_load_project = None
         self.tree_view = None
         self.file_model = None
         self.work_progress = None
@@ -42,7 +43,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.mainFrame_ui = rt.Ui_MainWindow()
         self.mainFrame_ui.setupUi(self)
         self.mainFrame_ui.explorer_frame.setMinimumWidth(300)  # 최소 너비 설정
-        # self.mainFrame_ui.explorer_verticalLayout.setStretch(0, 1)  # QTreeView가 수평으로 확장될 수 있도록 설정
         self.mainFrame_ui.explorer_frame.hide()
         self.mainFrame_ui.explore_pushButton.setText("Show")
 
@@ -55,9 +55,23 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
             self.tree_view = QtWidgets.QTreeView()
             self.tree_view.setModel(self.file_model)
+
+            use_style = True
+            if use_style:
+                # 스타일 시트 설정
+                self.tree_view.setStyleSheet("""
+                            QTreeView::item:selected {
+                                background-color: red; /* 선택된 항목 배경색 */
+                                color: white; /* 선택된 항목 텍스트 색상 */
+                            }
+                            QTreeView::item {
+                                background-color: transparent; /* 기본 항목 배경색 */
+                                color: black; /* 기본 항목 텍스트 색상 */
+                            }
+                        """)
+
             # 초기화 시 루트를 설정하지 않음
             self.tree_view.setHeaderHidden(False)  # 헤더는 보이게 설정
-            # self.tree_view.setRootIndex(self.file_model.index(QtCore.QDir.rootPath()))  # 루트 경로 설정을 하지 않음
 
             # 가로 스크롤바 항상 보이도록 설정
             self.tree_view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
@@ -74,36 +88,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             self.mainFrame_ui.explorer_scrollArea.setWidget(self.tree_view)
 
         self.setWindowTitle(Version)
-
-    def open_directory(self):
-
-        m_dir = QFileDialog.getExistingDirectory(self, "Select Directory")
-
-        if not m_dir:
-            return
-
-        # PRINT_("Open: ", m_dir)
-
-        # self.deselect_file_dir()
-        self.tree_view.clearSelection()  # 기존 선택된 항목 해제
-        self.tree_view.setCurrentIndex(QModelIndex())  # 현재 인덱스 초기화
-
-        # 선택한 폴더를 탐색기에서 갱신
-        self.file_model.setRootPath(m_dir)  # 초기 루트 경로 설정
-        index = self.file_model.index(m_dir)  # m_dir의 인덱스를 가져옴
-
-        # 선택한 폴더가 유효한지 확인
-        if index.isValid():
-            self.tree_view.setRootIndex(index)  # 선택한 폴더를 루트로 설정
-            self.ctrl_meta_info(show=True)
-
-            # 기존에 explorer_verticalLayout에 추가된 경우 다시 추가하지 않음
-            if self.tree_view.parent() is None:
-                self.mainFrame_ui.explorer_verticalLayout.addWidget(self.tree_view)
-
-            self.explore_window_ctrl(always_show=True)
-        else:
-            print("Error: Invalid directory index.")
 
     def closeEvent(self, event):
         answer = QtWidgets.QMessageBox.question(self,
@@ -150,8 +134,8 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         # sys.stdout = EmittingStream(textWritten=self.normalOutputWritten)
         self.mainFrame_ui.log_clear_pushButton.clicked.connect(self.cleanLogBrowser)
 
-        self.mainFrame_ui.actionOn.triggered.connect(self.log_browser_ctrl)
-        self.mainFrame_ui.actionOff.triggered.connect(self.log_browser_ctrl)
+        # self.mainFrame_ui.actionOn.triggered.connect(self.log_browser_ctrl)
+        # self.mainFrame_ui.actionOff.triggered.connect(self.log_browser_ctrl)
 
         self.mainFrame_ui.explore_pushButton.clicked.connect(self.explore_window_ctrl)
 
@@ -183,7 +167,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         # 선택된 라디오 버튼이 무엇인지 확인
         for radio_button in self.llm_radio_buttons:
             if radio_button.isChecked():  # 선택된 버튼을 확인
-                print(f"Selected GPT model: {radio_button.text()}")  # 선택된 버튼의 텍스트 출력
+                PRINT_(f"Selected GPT model: {radio_button.text()}")  # 선택된 버튼의 텍스트 출력
 
     # def file_double_clicked(self, index):
     #     """Handle double-click event on a file in the QTreeView."""
@@ -201,7 +185,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     #                     if not line:
     #                         break  # 더 이상 읽을 줄이 없으면 종료
     #                     cleaned_sentence = ANSI_ESCAPE.sub('', line)
-    #                     print(cleaned_sentence)  # 각 줄을 처리
+    #                     PRINT_(cleaned_sentence)  # 각 줄을 처리
     #
     #         except FileNotFoundError:
     #             PRINT_("Error: The file was not found.")
@@ -223,10 +207,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             self.mainFrame_ui.explorer_frame.show()
             self.mainFrame_ui.explore_pushButton.setText("Hide")
 
-    def finished_open_dir(self):
-        if self.work_progress is not None:
-            self.work_progress.close()
-
     def ctrl_meta_info(self, show=True):
         if not show:
             # 파일 크기(1), 파일 형식(2), 날짜 수정(3) 컬럼 숨기기
@@ -235,11 +215,71 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             self.tree_view.setColumnHidden(3, True)  # 날짜 숨김
 
     def deselect_file_dir(self):
-        PRINT_(f"Deselected file/folder")
+        # PRINT_(f"Deselected file/folder")
 
         # 기존 선택 초기화
         self.tree_view.clearSelection()  # 기존 선택된 항목 해제
         self.tree_view.setCurrentIndex(QModelIndex())  # 현재 인덱스 초기화
+
+    def finished_load_thread(self, m_dir=None):
+
+        if self.work_progress is not None:
+            self.work_progress.close()
+
+        if self.t_load_project is not None:
+            self.t_load_project.stop()
+
+            # 선택된 항목 초기화
+            self.deselect_file_dir()
+
+            if m_dir is None:
+                return
+
+            # 선택한 폴더를 탐색기에서 갱신
+            self.file_model.setRootPath(m_dir)  # 루트 경로 설정
+
+            # QFileSystemModel이 이미 동일한 경로에 대해 캐시된 데이터를 가지고 있으면 갱신되지 않음
+            index = self.file_model.index(m_dir)  # m_dir의 인덱스를 가져옴
+
+            # 선택한 폴더가 유효한지 확인
+            if index.isValid():
+                PRINT_("valid directory index.", m_dir)
+
+                # 모델을 새로 설정하고 루트 인덱스를 다시 설정
+                self.tree_view.setModel(None)  # 기존 모델 제거
+                self.tree_view.setModel(self.file_model)  # 모델을 새로 설정
+
+                # 루트 경로 재설정
+                self.tree_view.setRootIndex(index)  # 새로운 루트로 설정
+
+                # 명시적으로 모델 갱신
+                self.tree_view.viewport().update()
+
+                self.ctrl_meta_info(show=True)
+
+                # explorer_verticalLayout에 이미 추가된 경우 다시 추가하지 않음
+                if self.tree_view.parent() is None:
+                    self.mainFrame_ui.explorer_verticalLayout.addWidget(self.tree_view)
+
+                self.explore_window_ctrl(always_show=True)
+
+            else:
+                PRINT_("Error: Invalid directory index.", m_dir)
+
+    def open_directory(self):
+        m_dir = QFileDialog.getExistingDirectory(self, "Select Directory")
+
+        if not m_dir:
+            return
+
+        self.work_progress = ProgressDialog(modal=True, message="Loading Selected Project Files", show=True, unknown_max_limit=True)
+        self.work_progress.send_user_close_event.connect(self.finished_load_thread)
+
+        self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, base_dir=BASE_DIR)
+        self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
+        self.t_load_project.start()
+
+        self.work_progress.show_progress()
 
     def start_analyze(self):
         selected_indexes = self.tree_view.selectedIndexes()
@@ -248,16 +288,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             PRINT_(f"Selected file/folder: {file_path}")
         else:
             PRINT_("No file or folder selected.")
-
-    def check_all_scenario(self):
-        sender = self.sender()
-        check = False
-
-        if sender:
-            if sender.objectName() == "all_check_scenario":
-                check = True
-            elif sender.objectName() == "all_uncheck_scenario":
-                check = False
 
     def save_result(self):
         pass
