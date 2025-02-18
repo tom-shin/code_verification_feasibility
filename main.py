@@ -28,6 +28,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.llm_analyze_instance = None
         self.t_load_project = None
         self.tree_view = None
         self.file_model = None
@@ -103,36 +104,51 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         else:
             event.ignore()
 
-    def normalOutputWritten(self, text):
-        cursor = self.mainFrame_ui.logtextbrowser.textCursor()
-        cursor.movePosition(QtGui.QTextCursor.End)
+    # def normalOutputWritten(self, text):
+    #     cursor = self.mainFrame_ui.logtextbrowser.textCursor()
+    #     cursor.movePosition(QtGui.QTextCursor.End)
 
-        # 기본 글자 색상 설정
-        color_format = cursor.charFormat()
-        color_format.setForeground(QtCore.Qt.red if "><" in text else QtCore.Qt.black)
+    #     # 기본 글자 색상 설정
+    #     color_format = cursor.charFormat()
+    #     color_format.setForeground(QtCore.Qt.red if "><" in text else QtCore.Qt.black)
 
-        cursor.setCharFormat(color_format)
-        cursor.insertText(text)
+    #     cursor.setCharFormat(color_format)
+    #     cursor.insertText(text)
 
-        # 커서를 최신 위치로 업데이트
-        self.mainFrame_ui.logtextbrowser.setTextCursor(cursor)
-        self.mainFrame_ui.logtextbrowser.ensureCursorVisible()
+    #     # 커서를 최신 위치로 업데이트
+    #     self.mainFrame_ui.logtextbrowser.setTextCursor(cursor)
+    #     self.mainFrame_ui.logtextbrowser.ensureCursorVisible()
 
-    def cleanLogBrowser(self):
-        self.mainFrame_ui.logtextbrowser.clear()
+    def cleanPromptBrowser(self):
+        self.mainFrame_ui.prompt_window.clear()
 
-    def log_browser_ctrl(self):
-        sender = self.sender()
-        if sender:
-            if sender.objectName() == "actionOff":
-                self.mainFrame_ui.logtextbrowser.hide()
-            else:
-                self.mainFrame_ui.logtextbrowser.show()
+    def getLLMPrompt(self):
+        text = self.mainFrame_ui.prompt_window.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
+        # combined_text = "".join(text)
+
+        return text
+
+    def save_prompt(self):
+        new_text = self.getLLMPrompt()
+        file_path = os.path.join(BASE_DIR, "source", "__init__.py")
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # 2. keyword 딕셔너리의 pre_prompt 부분을 찾아 수정
+        pattern = r'("pre_prompt": \[\s*)(.*?)\s*(\])'  # pre_prompt 리스트를 찾는 정규식
+        replacement = rf'\1{repr(new_text)}, \2\3'  # 새로운 텍스트를 추가
+
+        modified_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+
+        # 3. 변경된 내용을 a.py 파일에 다시 쓰기
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(modified_content)
 
     def connectSlotSignal(self):
         """ sys.stdout redirection """
         # sys.stdout = EmittingStream(textWritten=self.normalOutputWritten)
-        self.mainFrame_ui.log_clear_pushButton.clicked.connect(self.cleanLogBrowser)
+        self.mainFrame_ui.prompt_clear_pushButton.clicked.connect(self.cleanPromptBrowser)
 
         # self.mainFrame_ui.actionOn.triggered.connect(self.log_browser_ctrl)
         # self.mainFrame_ui.actionOff.triggered.connect(self.log_browser_ctrl)
@@ -145,12 +161,15 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.mainFrame_ui.deselectpushButton.clicked.connect(self.deselect_file_dir)
 
+        self.mainFrame_ui.save_pushButton.clicked.connect(self.save_prompt)
+        self.mainFrame_ui.save_pushButton.hide()
+
         # Connect double-click signal to handler
         # self.tree_view.doubleClicked.connect(self.file_double_clicked)
 
     def setupGPTModels(self):
         row = 0  # 그리드 레이아웃의 첫 번째 행
-        for index, name in enumerate(keyword["gpt_models"]):
+        for index, name in enumerate(keyword["llm_models"]):
             radio_button = QRadioButton(name)  # 라디오 버튼 생성
             if index == 0:  # 첫 번째 요소는 기본적으로 체크되도록 설정
                 radio_button.setChecked(True)
@@ -161,13 +180,14 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     def setDefaultPrompt(self):
         prompt = "\n".join(keyword["pre_prompt"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
-        self.mainFrame_ui.logtextbrowser.setText(prompt)
+        self.mainFrame_ui.prompt_window.setText(prompt)
 
     def getSelectedModel(self):
         # 선택된 라디오 버튼이 무엇인지 확인
         for radio_button in self.llm_radio_buttons:
-            if radio_button.isChecked():  # 선택된 버튼을 확인
+            if radio_button.isChecked():  # 선택된 버튼을 확인                
                 PRINT_(f"Selected GPT model: {radio_button.text()}")  # 선택된 버튼의 텍스트 출력
+                return radio_button.text()
 
     # def file_double_clicked(self, index):
     #     """Handle double-click event on a file in the QTreeView."""
@@ -266,31 +286,78 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             else:
                 PRINT_("Error: Invalid directory index.", m_dir)
 
+    def update_progressbar_label(self, file_name, value):
+        if self.work_progress is not None:
+            self.work_progress.onProgressTextChanged(text=file_name)
+            self.work_progress.onCountChanged(value=value % self.work_progress.getProgressBarMaximumValue())
+
     def open_directory(self):
         m_dir = QFileDialog.getExistingDirectory(self, "Select Directory")
 
         if not m_dir:
             return
 
-        self.work_progress = ProgressDialog(modal=True, message="Loading Selected Project Files", show=True, unknown_max_limit=True)
+        self.work_progress = ProgressDialog(modal=True, message="Loading Selected Project Files", show=True,
+                                            unknown_max_limit=True)
         self.work_progress.send_user_close_event.connect(self.finished_load_thread)
 
         self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, base_dir=BASE_DIR)
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
+        self.t_load_project.copy_status_sig.connect(self.update_progressbar_label)
+
         self.t_load_project.start()
 
         self.work_progress.show_progress()
 
+    def llm_analyze_result(self, message=None):
+        if self.work_progress is not None:
+            self.work_progress.close()
+
+        if self.llm_analyze_instance is not None:
+            self.llm_analyze_instance.find_and_stop_qthreads()
+            self.llm_analyze_instance.stop_all_threads()
+            self.llm_analyze_instance.stop()
+
+            if message is not None:
+                # 덮어쓰기
+                self.mainFrame_ui.llmresult_plainTextEdit.setPlainText(message)
+
+                # append 쓰기
+                # self.mainFrame_ui.llmresult_plainTextEdit.appendPlainText(message)
+
     def start_analyze(self):
         selected_indexes = self.tree_view.selectedIndexes()
+
+        file_path = None
         if selected_indexes:
             file_path = self.file_model.filePath(selected_indexes[0])
-            PRINT_(f"Selected file/folder: {file_path}")
         else:
-            PRINT_("No file or folder selected.")
+            print("[Info] 파일 또는 폴더를 선택하지 않았습니다. 기본 prompt 창에 있는 내용 기반으로 분석합니다")
 
-    def save_result(self):
-        pass
+        llm_model = self.getSelectedModel()
+        prompt = self.getLLMPrompt()
+
+        print("[Info] LLM Model")
+        print(f"-->{llm_model}")
+        print("[Info] Using Prompt")
+        print(f"-->{prompt}")
+
+        self.work_progress = ProgressDialog(modal=True,
+                                            message="Analyzing Selected Project Files",
+                                            show=True,
+                                            unknown_max_limit=True,
+                                            self_onCountChanged_params=True
+                                            )
+        self.work_progress.send_user_close_event.connect(self.llm_analyze_result)
+
+        self.llm_analyze_instance = LLM_Analyze_Prompt_Thread(project_src_file=file_path,
+                                                              prompt=prompt,
+                                                              llm_model=llm_model
+                                                              )
+        self.llm_analyze_instance.finished_analyze_sig.connect(self.llm_analyze_result)
+        self.llm_analyze_instance.start()
+
+        self.work_progress.show_progress()
 
 
 if __name__ == "__main__":

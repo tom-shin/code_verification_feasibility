@@ -15,6 +15,8 @@ import platform
 import uuid
 import logging
 import threading
+import openai
+import httpx
 from collections import OrderedDict
 from datetime import datetime
 
@@ -30,7 +32,7 @@ from langchain_text_splitters import CharacterTextSplitter
 
 logging.basicConfig(level=logging.INFO)
 
-EnablePrint = True
+EnablePrint = False
 
 
 def PRINT_(*args):
@@ -38,14 +40,14 @@ def PRINT_(*args):
         logging.info(args)
 
 
-Version = "Feasibility for Code Verification 0.0.2 (made by tom.shin)"
+Version = "Feasibility for Code Verification 0.1.0 (made by tom.shin)"
 
 keyword = {
     "element_1": [""],
     "test_model": ["onnx"],
     "error_keyword": ["Error Code:", "Error code:", "Error msg:"],
-    "exclusive_dir": [".git", ".idea", "pycache"],
-    "gpt_models": ["gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+    "exclusive_dir": [".git", ".idea", "pycache", ".zip"],
+    "llm_models": ["gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
     "pre_prompt": [
         "The above is a summary of each part of the project, including file names and paths. "
         "Based on this, analyze the overall structure, relationships between files, code quality, "
@@ -62,7 +64,7 @@ ANSI_ESCAPE = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 class ProgressDialog(QDialog):  # This class will handle both modal and non-modal dialogs
     send_user_close_event = pyqtSignal()
 
-    def __init__(self, message, modal=True, show=False, parent=None, unknown_max_limit=False):
+    def __init__(self, message, modal=True, show=False, parent=None, unknown_max_limit=False, self_onCountChanged_params=False):
         super().__init__(parent)
 
         self.setWindowTitle(message)
@@ -95,9 +97,8 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
         layout.addWidget(self.progress_bar)
         layout.addWidget(self.label)
 
-        if not self.unknown_max_limit:
-            self.radio_button = QRadioButton("", self)
-            layout.addWidget(self.radio_button)
+        self.radio_button = QRadioButton("", self)
+        layout.addWidget(self.radio_button)
 
         layout.addLayout(h_layout)
         self.setLayout(layout)
@@ -119,14 +120,18 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
         if self.unknown_max_limit:
             # Remove the progress bar format (e.g., "%" sign)
             self.progress_bar.setFormat("")  # No percentage displayed
-            self.cnt = 0
-            self.timer.timeout.connect(self.unknown_progress)
-            self.timer.start(100)  # 500ms interval
-        else:
-            self.timer.timeout.connect(self.toggle_radio_button)
-            self.timer.start(500)  # 500ms interval
+
+        self.timer.timeout.connect(self.toggle_radio_button)
+        self.timer.start(500)  # 500ms interval
+
+        self.cnt = 0
+        self.self_onCountChanged_params = self_onCountChanged_params
+
+    def getProgressBarMaximumValue(self):
+        return self.max_cnt
 
     def setProgressBarMaximum(self, max_value):
+        self.max_cnt = max_value
         self.progress_bar.setMaximum(int(max_value))
 
     def onCountChanged(self, value):
@@ -145,13 +150,11 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
         self.send_user_close_event.emit()
         event.accept()
 
-    def unknown_progress(self):
-        self.cnt += 1
-        if self.cnt >= 99:
-            self.cnt = 0
-        self.onCountChanged(value=self.cnt)
-
     def toggle_radio_button(self):
+        if self.self_onCountChanged_params:
+            self.cnt += 1
+            self.onCountChanged(self.cnt % self.max_cnt)
+
         if self.radio_state:
             self.radio_button.setStyleSheet("""
                         QRadioButton::indicator {
@@ -685,92 +688,6 @@ def get_mac_address():
 
 
 # /////////////////////////////////////////////////////////////////////////////////////////
-class LoadDir_Thread(QThread):
-    finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
-
-    def __init__(self, m_source_dir, base_dir):
-        super().__init__()
-        self.running = True
-
-        self.src_dir = m_source_dir.replace("\\", "/")
-
-        unique_id = str(uuid.uuid4())  # 고유한 UUID 생성
-        self.target_dir = os.path.join(base_dir, f"root_temp_{unique_id}", os.path.basename(self.src_dir)).replace("\\",
-                                                                                                                   "/")
-
-        self.cleanup_root_temp_folders(base_dir=base_dir)
-
-    @staticmethod
-    def cleanup_root_temp_folders(base_dir):
-        """temp_dir 내에서 root_temp_로 시작하는 모든 폴더를 삭제합니다."""
-        for root, dirs, files in os.walk(base_dir, topdown=False):
-            for dir_name in dirs:
-                # 'root_temp_'로 시작하는 폴더를 찾기
-                if dir_name.startswith("root_temp_"):
-                    dir_path = os.path.join(root, dir_name)
-                    PRINT_(f"Deleting folder: {dir_path}")  # 삭제하려는 폴더 경로 출력
-                    shutil.rmtree(dir_path)  # 해당 폴더 및 그 하위 항목 삭제
-
-    def run(self) -> None:
-        # 코드 작성
-        self.copy_directory_structure_2()
-
-        self.finished_load_project_sig.emit(os.path.dirname(self.target_dir))
-
-    def copy_directory_structure_1(self):
-        if os.path.exists(self.target_dir):
-            shutil.rmtree(self.target_dir)
-
-        shutil.copytree(self.src_dir, self.target_dir)
-
-    def copy_directory_structure_2(self):
-        CheckDir(dir_=self.target_dir)
-
-        cnt = 0
-        exclusive_list = keyword["exclusive_dir"]  # 제외할 단어들 리스트
-
-        # src_dir의 모든 파일과 폴더를 재귀적으로 복사
-        for root, dirs, files in os.walk(self.src_dir):
-            if not self.running:
-                print("force termination_main loop")
-                break
-
-            # 현재 폴더명이 exclusive_list에 포함된 단어를 포함하는지 체크
-            if any(excluded_word in os.path.basename(root) for excluded_word in exclusive_list):
-                continue  # 제외할 단어가 있으면 해당 폴더는 건너뜀
-
-            # dirs에서 제외할 폴더를 제거
-            dirs[:] = [d for d in dirs if not any(excluded_word in d for excluded_word in exclusive_list)]
-
-            # 현재 폴더의 상대 경로를 target_dir에 맞게 계산
-            relative_path = os.path.relpath(root, self.src_dir).replace("\\", "/")
-            destination_dir = os.path.join(self.target_dir, relative_path).replace("\\", "/")
-
-            if not os.path.exists(destination_dir):
-                os.makedirs(destination_dir)
-
-            # 현재 폴더 내의 모든 파일을 복사
-            for file in files:
-                if not self.running:
-                    print("force termination_sub_loop")
-                    break
-
-                # 파일명이 exclusive_list에 포함된 단어를 포함하는지 체크
-                if any(excluded_word in file for excluded_word in exclusive_list):
-                    continue  # 제외할 단어가 있으면 해당 파일은 건너뜀
-
-                source_file = os.path.join(root, file).replace("\\", "/")
-                destination_file = os.path.join(destination_dir, file).replace("\\", "/")
-                shutil.copy2(source_file, destination_file)  # 메타데이터 포함하여 복사
-                cnt += 1
-                PRINT_(cnt)
-
-    def stop(self):
-        self.running = False
-        self.quit()
-        self.wait(3000)
-
-
 def find_and_stop_qthreads():
     app = QApplication.instance()
     if app:
@@ -808,3 +725,304 @@ def stop_all_threads():
 
         if thread.is_alive():
             thread.join(timeout=1)  # 1초 기다린 후 종료
+
+
+class LoadDir_Thread(QThread):
+    finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
+    copy_status_sig = pyqtSignal(str, int)  # ret, failed_pairs, memory_profile 전달
+
+    def __init__(self, m_source_dir, base_dir):
+        super().__init__()
+        self.running = True
+
+        self.src_dir = m_source_dir.replace("\\", "/")
+
+        unique_id = str(uuid.uuid4())  # 고유한 UUID 생성
+        self.target_dir = os.path.join(base_dir, f"root_temp_{unique_id}", os.path.basename(self.src_dir)).replace("\\",
+                                                                                                                   "/")
+
+        self.cleanup_root_temp_folders(base_dir=base_dir)
+
+    @staticmethod
+    def cleanup_root_temp_folders(base_dir):
+        """temp_dir 내에서 root_temp_로 시작하는 모든 폴더를 삭제합니다."""
+        for root, dirs, files in os.walk(base_dir, topdown=False):
+            for dir_name in dirs:
+                # 'root_temp_'로 시작하는 폴더를 찾기
+                if dir_name.startswith("root_temp_"):
+                    dir_path = os.path.join(root, dir_name)
+                    PRINT_(f"Deleting folder: {dir_path}")  # 삭제하려는 폴더 경로 출력
+                    shutil.rmtree(dir_path)  # 해당 폴더 및 그 하위 항목 삭제
+
+    def run(self) -> None:
+        # 코드 작성
+        self.copy_directory_structure_2()
+
+        if self.running:
+            self.finished_load_project_sig.emit(os.path.dirname(self.target_dir))
+
+    def copy_directory_structure_1(self):
+        if os.path.exists(self.target_dir):
+            shutil.rmtree(self.target_dir)
+
+        shutil.copytree(self.src_dir, self.target_dir)
+
+    def copy_directory_structure_2(self):
+        CheckDir(dir_=self.target_dir)
+
+        cnt = 0
+        exclusive_list = keyword["exclusive_dir"]  # 제외할 단어들 리스트
+
+        # src_dir의 모든 파일과 폴더를 재귀적으로 복사
+        for root, dirs, files in os.walk(self.src_dir):
+            if not self.running:
+                PRINT_("force termination_main loop")
+                break
+
+            # 현재 폴더명이 exclusive_list에 포함된 단어를 포함하는지 체크
+            if any(excluded_word in os.path.basename(root) for excluded_word in exclusive_list):
+                continue  # 제외할 단어가 있으면 해당 폴더는 건너뜀
+
+            # dirs에서 제외할 폴더를 제거
+            dirs[:] = [d for d in dirs if not any(excluded_word in d for excluded_word in exclusive_list)]
+
+            # 현재 폴더의 상대 경로를 target_dir에 맞게 계산
+            relative_path = os.path.relpath(root, self.src_dir).replace("\\", "/")
+            destination_dir = os.path.join(self.target_dir, relative_path).replace("\\", "/")
+
+            if not os.path.exists(destination_dir):
+                os.makedirs(destination_dir)
+
+            # 현재 폴더 내의 모든 파일을 복사
+            for file in files:
+                if not self.running:
+                    PRINT_("force termination_sub_loop")
+                    break
+
+                # 파일명이 exclusive_list에 포함된 단어를 포함하는지 체크
+                if any(excluded_word in file for excluded_word in exclusive_list):
+                    continue  # 제외할 단어가 있으면 해당 파일은 건너뜀
+
+                source_file = os.path.join(root, file).replace("\\", "/")
+                destination_file = os.path.join(destination_dir, file).replace("\\", "/")
+                shutil.copy2(source_file, destination_file)  # 메타데이터 포함하여 복사
+
+                cnt += 1
+                self.copy_status_sig.emit(f"[{cnt}]   ../{os.path.basename(source_file)} copied", cnt)
+
+                PRINT_(cnt)
+
+    def stop(self):
+        self.running = False
+        self.quit()
+        self.wait(3000)
+
+
+class LLM_Analyze_Prompt_Thread(QThread):
+    finished_analyze_sig = pyqtSignal(str)
+
+    def __init__(self, project_src_file=None, prompt=None, llm_model="gpt-4o-mini"):
+        super().__init__()
+
+        self.running = True
+        self.root_dir = project_src_file
+        self.prompt = prompt
+        self.llm = llm_model
+
+        # OpenAI API 설정
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.client = openai.OpenAI()
+
+        self.combined_content = ""
+        self.file_metadata = []  # 파일 경로와 파일명을 저장할 리스트
+
+    @staticmethod
+    def find_and_stop_qthreads():
+        app = QApplication.instance()
+        if app:
+            for widget in app.allWidgets():
+                if isinstance(widget, QThread) and widget is not QThread.currentThread():
+                    PRINT_(f"Stopping QThread: {widget}")
+                    widget.quit()
+                    widget.wait()
+
+        # QObject 트리에서 QThread 찾기
+        for obj in QObject.children(QApplication.instance()):
+            if isinstance(obj, QThread) and obj is not QThread.currentThread():
+                PRINT_(f"Stopping QThread: {obj}")
+                obj.quit()
+                obj.wait()
+
+    @staticmethod
+    def stop_all_threads():
+        current_thread = threading.current_thread()
+
+        for thread in threading.enumerate():
+            if thread is current_thread:  # 현재 실행 중인 main 스레드는 제외
+                continue
+
+            if isinstance(thread, threading._DummyThread):  # 더미 스레드는 제외
+                PRINT_(f"Skipping DummyThread: {thread.name}")
+                continue
+
+            PRINT_(f"Stopping Thread: {thread.name}")
+
+            if hasattr(thread, "stop"):  # stop() 메서드가 있으면 호출
+                thread.stop()
+            elif hasattr(thread, "terminate"):  # terminate() 메서드가 있으면 호출
+                thread.terminate()
+
+            if thread.is_alive():
+                thread.join(timeout=1)  # 1초 기다린 후 종료
+
+    @staticmethod
+    def get_file_list(folder_path):
+        """ 주어진 폴더 또는 파일에서 모든 파일 경로 리스트를 반환 """
+        if os.path.isfile(folder_path):
+            return [folder_path]
+        elif os.path.isdir(folder_path):
+            return [os.path.join(root, filename)
+                    for root, _, files in os.walk(folder_path)
+                    for filename in files]
+        else:
+            return []
+
+    @staticmethod
+    def read_files(file_paths):
+        """ 파일 리스트를 받아서 내용을 읽고 메타데이터를 저장 """
+        ret = True
+        file_metadata = []
+        for file_path in file_paths:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                    file_metadata.append({
+                        "file_name": os.path.basename(file_path),
+                        "file_path": file_path,
+                        "content": content
+                    })
+                ret = True
+            except Exception as e:
+                ret = False
+                PRINT_(f"파일을 읽을 수 없음: {file_path} ({e})")
+        return file_metadata, ret
+
+    @staticmethod
+    def chunk_logic_algorithm(text, max_length, overlap=2):
+        """ def/class 단위로 코드 청크 분할 """
+        pattern = r"^(def |class )"
+        lines = text.split("\n")
+
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for i, line in enumerate(lines):
+            if re.match(pattern, line) and current_length >= max_length:
+                overlap_part = lines[max(0, i - overlap): i]
+                chunks.append("\n".join(current_chunk + overlap_part))
+                current_chunk = overlap_part[:]
+                current_length = sum(len(l) for l in current_chunk)
+
+            current_chunk.append(line)
+            current_length += len(line)
+
+        if current_chunk:
+            chunks.append("\n".join(current_chunk))
+
+        return chunks
+
+    def summarize_text(self, chunk, using_model):
+        """ Use OpenAI to summarize long text """
+        response = self.client.chat.completions.create(
+            model=using_model,
+            messages=[{"role": "user", "content": "Please summarize the following code snippet:\n\n" + chunk}]
+        )
+        return response.choices[0].message.content
+
+    def summarize_chunks(self, file_metadata, max_length, using_model):
+        """ 파일별 코드 청크를 나누고 개별 청크를 요약 """
+        chunk_summaries = []
+        for metadata in file_metadata:
+            chunks = self.chunk_logic_algorithm(text=metadata["content"], max_length=max_length)  # 청크 분할 로직
+            for chunk in chunks:
+                summary = self.summarize_text(chunk=chunk, using_model=using_model)  # 개별 청크 요약
+                chunk_summaries.append(f"File: {metadata['file_name']} (Path: {metadata['file_path']})\n{summary}")
+        return chunk_summaries
+
+    def generate_final_analysis(self, chunk_summaries=None, using_model="gpt-4o-mini",
+                                using_prompt="please analyze prompt", timeout=300.0):
+
+        """ 전체 요약 결과를 바탕으로 최종 분석 요청 """
+        if chunk_summaries is None:
+            final_prompt = (
+                f"{using_prompt}"
+            )
+        else:
+            final_prompt = (
+                    "\n\n".join(chunk_summaries) +
+                    f"\n\n{using_prompt}"
+            )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=using_model,
+                messages=[{"role": "user", "content": final_prompt}],
+                timeout=timeout  # openai 라이브러리에서는 request_timeout 사용
+            )
+            return True, response.choices[0].message.content
+
+        except openai.OpenAIError as e:  # OpenAI 관련 오류
+            return False, f"OpenAI API Error: {str(e)} --> {timeout} s"
+
+        except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
+            import traceback
+            return False, f"Unexpected error: {str(e)}\n{traceback.format_exc()}"
+
+    def analyze_project(self, folder_path, max_length=3000, using_model="gpt-4o-mini", prompt="please analyze"):
+        chunk_summaries = None
+
+        if folder_path is not None:
+
+            """ 프로젝트 코드 파일을 분석하고 OpenAI로 평가 """
+            file_paths = self.get_file_list(folder_path=folder_path)
+            if len(file_paths) == 0:
+                self.finished_analyze_sig("Invalid File or Directory.")
+                self.running = False
+                return False, None
+
+            file_metadata, ret = self.read_files(file_paths=file_paths)
+            if not file_metadata or not ret:
+                self.finished_analyze_sig("Nothing to Read.")
+                self.running = False
+                return False, None
+
+            chunk_summaries = self.summarize_chunks(file_metadata=file_metadata, max_length=max_length,
+                                                    using_model=using_model)
+
+        ret, result_message = self.generate_final_analysis(chunk_summaries=chunk_summaries, using_model=using_model,
+                                                           using_prompt=prompt)
+        return ret, result_message
+
+    def run(self) -> None:
+        # 코드 작성
+        result_message = ""
+
+        if not self.api_key:
+            self.finished_analyze_sig.emit(
+                "OpenAI API Key not found. Please set the OPENAI_API_KEY environment variable.")
+            self.running = False
+
+        if self.running:
+            ret, result_message = self.analyze_project(folder_path=self.root_dir, using_model=self.llm,
+                                                       prompt=self.prompt)
+            if not ret:
+                if "timed out" not in result_message.lower():
+                    result_message = "Fail to Analyze"
+
+        self.finished_analyze_sig.emit(result_message)
+
+    def stop(self):
+        self.running = False
+        self.quit()
+        self.wait(3000)

@@ -120,7 +120,7 @@
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_11">
                   <item>
-                   <layout class="QFormLayout" name="formLayout"/>
+                   <widget class="QPlainTextEdit" name="llmresult_plainTextEdit"/>
                   </item>
                  </layout>
                 </widget>
@@ -260,7 +260,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QTextBrowser" name="logtextbrowser">
+        <widget class="QTextBrowser" name="prompt_window">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
            <horstretch>0</horstretch>
@@ -323,7 +323,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="log_clear_pushButton">
+          <widget class="QPushButton" name="prompt_clear_pushButton">
            <property name="text">
             <string>Prompt Clear</string>
            </property>
