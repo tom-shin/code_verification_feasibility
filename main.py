@@ -28,6 +28,9 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
+        control_parameter = os.path.join(BASE_DIR, "source", "control_parameter.json")
+        _, self.CONFIG_PARAMS = json_load_f(control_parameter, use_encoding=False)
+
         self.llm_analyze_instance = None
         self.t_load_project = None
         self.tree_view = None
@@ -88,7 +91,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             # 스크롤 영역에 추가
             self.mainFrame_ui.explorer_scrollArea.setWidget(self.tree_view)
 
-        self.setWindowTitle(Version)
+        self.setWindowTitle(self.CONFIG_PARAMS["Version"])
 
     def closeEvent(self, event):
         answer = QtWidgets.QMessageBox.question(self,
@@ -169,7 +172,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     def setupGPTModels(self):
         row = 0  # 그리드 레이아웃의 첫 번째 행
-        for index, name in enumerate(keyword["llm_models"]):
+        for index, name in enumerate(self.CONFIG_PARAMS["keyword"]["llm_models"]):
             radio_button = QRadioButton(name)  # 라디오 버튼 생성
             if index == 0:  # 첫 번째 요소는 기본적으로 체크되도록 설정
                 radio_button.setChecked(True)
@@ -179,7 +182,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             row += 1  # 행 번호 증가
 
     def setDefaultPrompt(self):
-        prompt = "\n".join(keyword["pre_prompt"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
+        prompt = "".join(self.CONFIG_PARAMS["keyword"]["pre_prompt"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
         self.mainFrame_ui.prompt_window.setText(prompt)
 
     def getSelectedModel(self):
@@ -297,11 +300,16 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         if not m_dir:
             return
 
-        self.work_progress = ProgressDialog(modal=True, message="Loading Selected Project Files", show=True,
+        if self.mainFrame_ui.popctrl_radioButton.isChecked():
+            modal_display = False
+        else:
+            modal_display = True
+
+        self.work_progress = ProgressDialog(modal=modal_display, message="Loading Selected Project Files", show=True,
                                             unknown_max_limit=True)
         self.work_progress.send_user_close_event.connect(self.finished_load_thread)
 
-        self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, base_dir=BASE_DIR)
+        self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, base_dir=BASE_DIR, exclusive=self.CONFIG_PARAMS["keyword"]["exclusive_dir"])
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
         self.t_load_project.copy_status_sig.connect(self.update_progressbar_label)
 
@@ -336,13 +344,22 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         llm_model = self.getSelectedModel()
         prompt = self.getLLMPrompt()
+        openai_key = "".join(self.CONFIG_PARAMS["openai_key"]["key"])
+        timeout = int(self.mainFrame_ui.timeoutlineEdit.text())
 
         print("[Info] LLM Model")
         print(f"-->{llm_model}")
         print("[Info] Using Prompt")
         print(f"-->{prompt}")
+        print("[Info] Time Out")
+        print(f"-->{timeout} s")
 
-        self.work_progress = ProgressDialog(modal=True,
+        if self.mainFrame_ui.popctrl_radioButton.isChecked():
+            modal_display = False
+        else:
+            modal_display = True
+
+        self.work_progress = ProgressDialog(modal=modal_display,
                                             message="Analyzing Selected Project Files",
                                             show=True,
                                             unknown_max_limit=True,
@@ -352,7 +369,9 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.llm_analyze_instance = LLM_Analyze_Prompt_Thread(project_src_file=file_path,
                                                               prompt=prompt,
-                                                              llm_model=llm_model
+                                                              llm_model=llm_model,
+                                                              openai_key=openai_key,
+                                                              timeout=int(timeout)
                                                               )
         self.llm_analyze_instance.finished_analyze_sig.connect(self.llm_analyze_result)
         self.llm_analyze_instance.start()

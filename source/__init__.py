@@ -1,4 +1,5 @@
 import time
+import traceback
 import warnings
 
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -16,9 +17,11 @@ import uuid
 import logging
 import threading
 import openai
+from openai._exceptions import OpenAIError, AuthenticationError
 import httpx
 from collections import OrderedDict
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, Future
 
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QThread, QObject, QModelIndex
@@ -26,9 +29,9 @@ from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar, QPushButton, QHBoxLayout, QSpacerItem, \
     QSizePolicy, QRadioButton, QWidget, QMessageBox, QFileDialog, QApplication, QFileSystemModel
 
-from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
-from langchain_text_splitters import MarkdownHeaderTextSplitter
-from langchain_text_splitters import CharacterTextSplitter
+# from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
+# from langchain_text_splitters import MarkdownHeaderTextSplitter
+# from langchain_text_splitters import CharacterTextSplitter
 
 logging.basicConfig(level=logging.INFO)
 
@@ -40,23 +43,6 @@ def PRINT_(*args):
         logging.info(args)
 
 
-Version = "Feasibility for Code Verification 0.1.0 (made by tom.shin)"
-
-keyword = {
-    "element_1": [""],
-    "test_model": ["onnx"],
-    "error_keyword": ["Error Code:", "Error code:", "Error msg:"],
-    "exclusive_dir": [".git", ".idea", "pycache", ".zip"],
-    "llm_models": ["gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
-    "pre_prompt": [
-        "The above is a summary of each part of the project, including file names and paths. "
-        "Based on this, analyze the overall structure, relationships between files, code quality, "
-        "and identify any issues or bugs in the code. "
-        "Also, suggest improvements and provide example code improvements.\n\n"
-        "Please provide the analysis and improvement suggestions in Korean"
-    ]
-}
-
 # ANSI 코드 정규식 패턴 (터미널 컬러 코드)
 ANSI_ESCAPE = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
@@ -64,7 +50,8 @@ ANSI_ESCAPE = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 class ProgressDialog(QDialog):  # This class will handle both modal and non-modal dialogs
     send_user_close_event = pyqtSignal()
 
-    def __init__(self, message, modal=True, show=False, parent=None, unknown_max_limit=False, self_onCountChanged_params=False):
+    def __init__(self, message, modal=True, show=False, parent=None, unknown_max_limit=False,
+                 self_onCountChanged_params=False):
         super().__init__(parent)
 
         self.setWindowTitle(message)
@@ -213,122 +200,122 @@ def json_load_f(file_path, use_encoding=False):
     return True, json_data
 
 
-def load_markdown(data_path):
-    with open(data_path, 'rb') as f:
-        result = chardet.detect(f.read())
-        encoding = result['encoding']
-
-    headers_to_split_on = [
-        ("#", "Header 1"),
-        ("##", "Header 2"),
-        ("###", "Header 3"),
-        ("####", "Header 4"),
-    ]
-    markdown_splitter = MarkdownHeaderTextSplitter(
-        headers_to_split_on=headers_to_split_on
-    )
-
-    with open(data_path, 'r', encoding=encoding) as file:
-        PRINT_(data_path)
-        data_string = file.read()
-        documents = markdown_splitter.split_text(data_string)
-
-        # 파일명을 metadata에 추가
-        domain = data_path  # os.path.basename(data_path)
-        for doc in documents:
-            if not doc.metadata:
-                doc.metadata = {}
-            doc.metadata["domain"] = domain  # Document 객체의 metadata 속성에 파일명 추가
-
-        return documents
-
-
-def load_txt(data_path):
-    with open(data_path, 'rb') as f:
-        result = chardet.detect(f.read())
-        encoding = result['encoding']
-
-    text_splitter = CharacterTextSplitter(
-        separator="\n",
-        length_function=len,
-        is_separator_regex=False,
-    )
-
-    with open(data_path, 'r', encoding=encoding) as file:
-        data_string = file.read().split("\n")
-        domain = data_path  # os.path.basename(data_path)
-        documents = text_splitter.create_documents(data_string)
-
-        for doc in documents:
-            if not doc.metadata:
-                doc.metadata = {}
-            doc.metadata["domain"] = domain  # Document 객체의 metadata 속성에 파일명 추가
-
-        return documents
+# def load_markdown(data_path):
+#     with open(data_path, 'rb') as f:
+#         result = chardet.detect(f.read())
+#         encoding = result['encoding']
+#
+#     headers_to_split_on = [
+#         ("#", "Header 1"),
+#         ("##", "Header 2"),
+#         ("###", "Header 3"),
+#         ("####", "Header 4"),
+#     ]
+#     markdown_splitter = MarkdownHeaderTextSplitter(
+#         headers_to_split_on=headers_to_split_on
+#     )
+#
+#     with open(data_path, 'r', encoding=encoding) as file:
+#         PRINT_(data_path)
+#         data_string = file.read()
+#         documents = markdown_splitter.split_text(data_string)
+#
+#         # 파일명을 metadata에 추가
+#         domain = data_path  # os.path.basename(data_path)
+#         for doc in documents:
+#             if not doc.metadata:
+#                 doc.metadata = {}
+#             doc.metadata["domain"] = domain  # Document 객체의 metadata 속성에 파일명 추가
+#
+#         return documents
 
 
-def load_general(base_dir):
-    data = []
-    cnt = 0
-    for root, dirs, files in os.walk(base_dir):
-        for file in files:
-            if file.endswith(".txt"):
-                file_path = os.path.join(root, file)
-                if os.path.getsize(file_path) > 0:
-                    cnt += 1
-                    data += load_txt(file_path)
-
-    PRINT_(f"the number of txt files is : {cnt}")
-    return data
-
-
-def load_document(base_dir):
-    data = []
-    cnt = 0
-    for root, dirs, files in os.walk(base_dir):
-        for file in files:
-            if file.endswith(".md"):
-                file_path = os.path.join(root, file)
-                if os.path.getsize(file_path) > 0:
-                    cnt += 1
-                    data += load_markdown(file_path)
-
-    PRINT_(f"the number of md files is : {cnt}")
-    return data
+# def load_txt(data_path):
+#     with open(data_path, 'rb') as f:
+#         result = chardet.detect(f.read())
+#         encoding = result['encoding']
+#
+#     text_splitter = CharacterTextSplitter(
+#         separator="\n",
+#         length_function=len,
+#         is_separator_regex=False,
+#     )
+#
+#     with open(data_path, 'r', encoding=encoding) as file:
+#         data_string = file.read().split("\n")
+#         domain = data_path  # os.path.basename(data_path)
+#         documents = text_splitter.create_documents(data_string)
+#
+#         for doc in documents:
+#             if not doc.metadata:
+#                 doc.metadata = {}
+#             doc.metadata["domain"] = domain  # Document 객체의 metadata 속성에 파일명 추가
+#
+#         return documents
 
 
-def get_markdown_files(source_dir):
-    dir_ = source_dir
-    loader = DirectoryLoader(dir_, glob="**/*.md", loader_cls=UnstructuredMarkdownLoader)
-    documents = loader.load()
-    PRINT_("number of doc: ", len(documents))
-    return documents
+# def load_general(base_dir):
+#     data = []
+#     cnt = 0
+#     for root, dirs, files in os.walk(base_dir):
+#         for file in files:
+#             if file.endswith(".txt"):
+#                 file_path = os.path.join(root, file)
+#                 if os.path.getsize(file_path) > 0:
+#                     cnt += 1
+#                     data += load_txt(file_path)
+#
+#     PRINT_(f"the number of txt files is : {cnt}")
+#     return data
 
 
-def get_directory(base_dir, user_defined_fmt=None, file_full_path=False):
-    data = set()
+# def load_document(base_dir):
+#     data = []
+#     cnt = 0
+#     for root, dirs, files in os.walk(base_dir):
+#         for file in files:
+#             if file.endswith(".md"):
+#                 file_path = os.path.join(root, file)
+#                 if os.path.getsize(file_path) > 0:
+#                     cnt += 1
+#                     data += load_markdown(file_path)
+#
+#     PRINT_(f"the number of md files is : {cnt}")
+#     return data
 
-    for root, dirs, files in os.walk(base_dir):
-        for exclusive in keyword["exclusive_dir"]:
-            if exclusive in dirs:
-                dirs.remove(exclusive)
 
-        for file in files:
-            if user_defined_fmt is None:
-                if any(file.endswith(ext) for ext in keyword["test_model"]):
-                    if file_full_path:
-                        data.add(os.path.join(root, file))
-                    else:
-                        data.add(root)
-            else:
-                if any(file.endswith(ext) for ext in user_defined_fmt):
-                    if file_full_path:
-                        data.add(os.path.join(root, file))
-                    else:
-                        data.add(root)
+# def get_markdown_files(source_dir):
+#     dir_ = source_dir
+#     loader = DirectoryLoader(dir_, glob="**/*.md", loader_cls=UnstructuredMarkdownLoader)
+#     documents = loader.load()
+#     PRINT_("number of doc: ", len(documents))
+#     return documents
 
-    unique_paths = sorted(data)
-    return unique_paths
+
+# def get_directory(base_dir, user_defined_fmt=None, file_full_path=False):
+#     data = set()
+#
+#     for root, dirs, files in os.walk(base_dir):
+#         for exclusive in keyword["exclusive_dir"]:
+#             if exclusive in dirs:
+#                 dirs.remove(exclusive)
+#
+#         for file in files:
+#             if user_defined_fmt is None:
+#                 if any(file.endswith(ext) for ext in keyword["test_model"]):
+#                     if file_full_path:
+#                         data.add(os.path.join(root, file))
+#                     else:
+#                         data.add(root)
+#             else:
+#                 if any(file.endswith(ext) for ext in user_defined_fmt):
+#                     if file_full_path:
+#                         data.add(os.path.join(root, file))
+#                     else:
+#                         data.add(root)
+#
+#     unique_paths = sorted(data)
+#     return unique_paths
 
 
 def CheckDir(dir_):
@@ -731,9 +718,10 @@ class LoadDir_Thread(QThread):
     finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
     copy_status_sig = pyqtSignal(str, int)  # ret, failed_pairs, memory_profile 전달
 
-    def __init__(self, m_source_dir, base_dir):
+    def __init__(self, m_source_dir, base_dir, exclusive):
         super().__init__()
         self.running = True
+        self.exclusive = exclusive
 
         self.src_dir = m_source_dir.replace("\\", "/")
 
@@ -771,7 +759,7 @@ class LoadDir_Thread(QThread):
         CheckDir(dir_=self.target_dir)
 
         cnt = 0
-        exclusive_list = keyword["exclusive_dir"]  # 제외할 단어들 리스트
+        exclusive_list = self.exclusive  # 제외할 단어들 리스트
 
         # src_dir의 모든 파일과 폴더를 재귀적으로 복사
         for root, dirs, files in os.walk(self.src_dir):
@@ -818,20 +806,266 @@ class LoadDir_Thread(QThread):
         self.wait(3000)
 
 
-class LLM_Analyze_Prompt_Thread(QThread):
+"""
+이미 요청이 진행 중인 상황에서 서버의 동작을 멈추고 싶은데....
+"""
+
+
+class upgrading_LLM_Analyze_Prompt_Thread(QThread):
     finished_analyze_sig = pyqtSignal(str)
 
-    def __init__(self, project_src_file=None, prompt=None, llm_model="gpt-4o-mini"):
+    def __init__(self, project_src_file=None, prompt=None, llm_model="gpt-4o-mini", openai_key=None, timeout=300):
         super().__init__()
 
         self.running = True
         self.root_dir = project_src_file
         self.prompt = prompt
         self.llm = llm_model
+        self.timeout = timeout
 
         # OpenAI API 설정
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = openai.OpenAI()
+        self.api_key = openai_key
+        self.client = None
+
+        self.future: Future = None  # 실행 중인 Future 객체 저장
+        self.executor = ThreadPoolExecutor(max_workers=1)  # OpenAI API 호출을 위한 실행기
+
+    @staticmethod
+    def find_and_stop_qthreads():
+        app = QApplication.instance()
+        if app:
+            for widget in app.allWidgets():
+                if isinstance(widget, QThread) and widget is not QThread.currentThread():
+                    PRINT_(f"Stopping QThread: {widget}")
+                    widget.quit()
+                    widget.wait()
+
+        # QObject 트리에서 QThread 찾기
+        for obj in QObject.children(QApplication.instance()):
+            if isinstance(obj, QThread) and obj is not QThread.currentThread():
+                PRINT_(f"Stopping QThread: {obj}")
+                obj.quit()
+                obj.wait()
+
+    @staticmethod
+    def stop_all_threads():
+        current_thread = threading.current_thread()
+
+        for thread in threading.enumerate():
+            if thread is current_thread:  # 현재 실행 중인 main 스레드는 제외
+                continue
+
+            if isinstance(thread, threading._DummyThread):  # 더미 스레드는 제외
+                PRINT_(f"Skipping DummyThread: {thread.name}")
+                continue
+
+            PRINT_(f"Stopping Thread: {thread.name}")
+
+            if hasattr(thread, "stop"):  # stop() 메서드가 있으면 호출
+                thread.stop()
+            elif hasattr(thread, "terminate"):  # terminate() 메서드가 있으면 호출
+                thread.terminate()
+
+            if thread.is_alive():
+                thread.join(timeout=1)  # 1초 기다린 후 종료
+
+    @staticmethod
+    def get_file_list(folder_path):
+        """ 주어진 폴더 또는 파일에서 모든 파일 경로 리스트를 반환 """
+        if os.path.isfile(folder_path):
+            return [folder_path]
+        elif os.path.isdir(folder_path):
+            return [os.path.join(root, filename)
+                    for root, _, files in os.walk(folder_path)
+                    for filename in files]
+        else:
+            return []
+
+    @staticmethod
+    def read_files(file_paths):
+        """ 파일 리스트를 받아서 내용을 읽고 메타데이터를 저장 """
+        error = ""
+        file_metadata = []
+        for file_path in file_paths:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                    file_metadata.append({
+                        "file_name": os.path.basename(file_path),
+                        "file_path": file_path,
+                        "content": content
+                    })
+
+            except Exception as e:
+                error += f"{file_path}\n"
+
+        return file_metadata, error
+
+    @staticmethod
+    def chunk_logic_algorithm(text, max_length, overlap=2):
+        """ def/class 단위로 코드 청크 분할 """
+        pattern = r"^(def |class )"
+        lines = text.split("\n")
+
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for i, line in enumerate(lines):
+            if re.match(pattern, line) and current_length >= max_length:
+                overlap_part = lines[max(0, i - overlap): i]
+                chunks.append("\n".join(current_chunk + overlap_part))
+                current_chunk = overlap_part[:]
+                current_length = sum(len(l) for l in current_chunk)
+
+            current_chunk.append(line)
+            current_length += len(line)
+
+        if current_chunk:
+            chunks.append("\n".join(current_chunk))
+
+        return chunks
+
+    def summarize_text(self, chunk, using_model, timeout):
+        """ Use OpenAI to summarize long text """
+        try:
+            response = self.client.chat.completions.create(
+                model=using_model,
+                messages=[{"role": "user", "content": "Please summarize the following code snippet:\n\n" + chunk}],
+                timeout=timeout
+            )
+            return response.choices[0].message.content, True
+        except openai.OpenAIError as e:  # OpenAI 관련 오류
+            return f"[Timed Out] summarize_text - OpenAI API Error: {str(e)} --> {timeout} s", False
+
+        except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
+            import traceback
+            return f"[Error] summarize_text - Unexpected error: {str(e)}\n{traceback.format_exc()}", False
+
+    def summarize_chunks(self, file_metadata, max_length, using_model, timeout):
+        """ 파일별 코드 청크를 나누고 개별 청크를 요약 """
+        chunk_summaries = []
+        for metadata in file_metadata:
+            chunks = self.chunk_logic_algorithm(text=metadata["content"], max_length=max_length)  # 청크 분할 로직
+            for chunk in chunks:
+                summary, ret = self.summarize_text(chunk=chunk, using_model=using_model, timeout=timeout)  # 개별 청크 요약
+                chunk_summaries.append(f"File: {metadata['file_name']} (Path: {metadata['file_path']})\n{summary}")
+                if not ret:
+                    return chunk_summaries, False
+
+        return chunk_summaries, True
+
+    def generate_final_analysis(self, chunk_summaries=None, using_model="gpt-4o-mini",
+                                using_prompt="please analyze prompt", timeout=300.0):
+
+        """ 전체 요약 결과를 바탕으로 최종 분석 요청 """
+        if chunk_summaries is None:
+            final_prompt = (
+                f"{using_prompt}"
+            )
+        else:
+            final_prompt = (
+                    "\n\n".join(chunk_summaries) +
+                    f"\n\n{using_prompt}"
+            )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=using_model,
+                messages=[{"role": "user", "content": final_prompt}],
+                timeout=timeout  # openai 라이브러리에서는 request_timeout 사용
+            )
+            return response.choices[0].message.content
+
+        except openai.OpenAIError as e:  # OpenAI 관련 오류
+            return f"[Timed Out] OpenAI API Error: {str(e)} --> {timeout} s"
+
+        except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
+            import traceback
+            return f"[Error] Unexpected error: {str(e)}\n{traceback.format_exc()}"
+
+    def analyze_project(self, folder_path, max_length=3000, using_model="gpt-4o-mini", prompt="please analyze",
+                        timeout=300):
+        chunk_summaries = None
+
+        if folder_path is not None:
+
+            """ 프로젝트 코드 파일을 분석하고 OpenAI로 평가 """
+            file_paths = self.get_file_list(folder_path=folder_path)
+            if len(file_paths) == 0:
+                return "[Error] File or Directory not existed."
+
+            file_metadata, error_msg = self.read_files(file_paths=file_paths)
+            if len(file_metadata) == 0:
+                return f"[Error] File Reading Error\n{error_msg}"
+
+            chunk_summaries, ret = self.summarize_chunks(file_metadata=file_metadata, max_length=max_length,
+                                                         using_model=using_model, timeout=timeout)
+            if ret:
+                if len(chunk_summaries) == 0:
+                    return f"[Error] Fail to Chunk Summary"
+            else:
+                return "\n".join(chunk_summaries)
+
+        result_message = self.generate_final_analysis(chunk_summaries=chunk_summaries, using_model=using_model,
+                                                      using_prompt=prompt, timeout=timeout)
+        return result_message
+
+    def run(self) -> None:
+        # 코드 작성
+        """ 스레드 실행 시 OpenAI API를 호출하여 분석 수행 """
+        if self.api_key is None:
+            result_message = "[Error] Set the OPENAI_API_KEY environment variable"
+            self.finished_analyze_sig.emit(result_message)
+            return
+
+        try:
+            self.client = openai.OpenAI(api_key=self.api_key)
+
+            # ThreadPoolExecutor에서 실행하여 Future 객체 반환
+            self.future = self.executor.submit(
+                self.analyze_project, self.root_dir, 3000, self.llm, self.prompt, self.timeout
+            )
+
+            # 결과를 가져옴 (future.cancel()을 통해 취소 가능)
+            result_message = self.future.result(timeout=self.timeout)
+
+        except openai.AuthenticationError:
+            result_message = "Authentication Error: Please check your OpenAI API key."
+        except openai.OpenAIError as e:
+            result_message = f"API Request Error: {str(e)}"
+        except Exception as e:
+            result_message = f"An unexpected error occurred: {str(e)}\n{traceback.format_exc()}"
+
+        self.finished_analyze_sig.emit(result_message)
+
+    def stop(self):
+        """ 실행 중인 스레드를 안전하게 중단 """
+        self.running = False
+
+        if self.future and not self.future.done():
+            self.future.cancel()  # 실행 중인 Future 작업 취소
+            print("[INFO] Future 작업이 취소되었습니다.")
+
+        self.quit()
+        self.wait(3000)
+
+
+class LLM_Analyze_Prompt_Thread(QThread):
+    finished_analyze_sig = pyqtSignal(str)
+
+    def __init__(self, project_src_file=None, prompt=None, llm_model="gpt-4o-mini", openai_key=None, timeout=300):
+        super().__init__()
+
+        self.running = True
+        self.root_dir = project_src_file
+        self.prompt = prompt
+        self.llm = llm_model
+        self.timeout = timeout
+
+        # OpenAI API 설정
+        self.api_key = openai_key
+        self.client = None
 
         self.combined_content = ""
         self.file_metadata = []  # 파일 경로와 파일명을 저장할 리스트
@@ -890,7 +1124,7 @@ class LLM_Analyze_Prompt_Thread(QThread):
     @staticmethod
     def read_files(file_paths):
         """ 파일 리스트를 받아서 내용을 읽고 메타데이터를 저장 """
-        ret = True
+        error = ""
         file_metadata = []
         for file_path in file_paths:
             try:
@@ -901,11 +1135,11 @@ class LLM_Analyze_Prompt_Thread(QThread):
                         "file_path": file_path,
                         "content": content
                     })
-                ret = True
+
             except Exception as e:
-                ret = False
-                PRINT_(f"파일을 읽을 수 없음: {file_path} ({e})")
-        return file_metadata, ret
+                error += f"{file_path}\n"
+
+        return file_metadata, error
 
     @staticmethod
     def chunk_logic_algorithm(text, max_length, overlap=2):
@@ -932,23 +1166,34 @@ class LLM_Analyze_Prompt_Thread(QThread):
 
         return chunks
 
-    def summarize_text(self, chunk, using_model):
+    def summarize_text(self, chunk, using_model, timeout):
         """ Use OpenAI to summarize long text """
-        response = self.client.chat.completions.create(
-            model=using_model,
-            messages=[{"role": "user", "content": "Please summarize the following code snippet:\n\n" + chunk}]
-        )
-        return response.choices[0].message.content
+        try:
+            response = self.client.chat.completions.create(
+                model=using_model,
+                messages=[{"role": "user", "content": "Please summarize the following code snippet:\n\n" + chunk}],
+                timeout=timeout
+            )
+            return response.choices[0].message.content, True
+        except openai.OpenAIError as e:  # OpenAI 관련 오류
+            return f"[Timed Out] summarize_text - OpenAI API Error: {str(e)} --> {timeout} s", False
 
-    def summarize_chunks(self, file_metadata, max_length, using_model):
+        except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
+            import traceback
+            return f"[Error] summarize_text - Unexpected error: {str(e)}\n{traceback.format_exc()}", False
+
+    def summarize_chunks(self, file_metadata, max_length, using_model, timeout):
         """ 파일별 코드 청크를 나누고 개별 청크를 요약 """
         chunk_summaries = []
         for metadata in file_metadata:
             chunks = self.chunk_logic_algorithm(text=metadata["content"], max_length=max_length)  # 청크 분할 로직
             for chunk in chunks:
-                summary = self.summarize_text(chunk=chunk, using_model=using_model)  # 개별 청크 요약
+                summary, ret = self.summarize_text(chunk=chunk, using_model=using_model, timeout=timeout)  # 개별 청크 요약
                 chunk_summaries.append(f"File: {metadata['file_name']} (Path: {metadata['file_path']})\n{summary}")
-        return chunk_summaries
+                if not ret:
+                    return chunk_summaries, False
+
+        return chunk_summaries, True
 
     def generate_final_analysis(self, chunk_summaries=None, using_model="gpt-4o-mini",
                                 using_prompt="please analyze prompt", timeout=300.0):
@@ -970,16 +1215,17 @@ class LLM_Analyze_Prompt_Thread(QThread):
                 messages=[{"role": "user", "content": final_prompt}],
                 timeout=timeout  # openai 라이브러리에서는 request_timeout 사용
             )
-            return True, response.choices[0].message.content
+            return response.choices[0].message.content
 
         except openai.OpenAIError as e:  # OpenAI 관련 오류
-            return False, f"OpenAI API Error: {str(e)} --> {timeout} s"
+            return f"[Timed Out] OpenAI API Error: {str(e)} --> {timeout} s"
 
         except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
             import traceback
-            return False, f"Unexpected error: {str(e)}\n{traceback.format_exc()}"
+            return f"[Error] Unexpected error: {str(e)}\n{traceback.format_exc()}"
 
-    def analyze_project(self, folder_path, max_length=3000, using_model="gpt-4o-mini", prompt="please analyze"):
+    def analyze_project(self, folder_path, max_length=3000, using_model="gpt-4o-mini", prompt="please analyze",
+                        timeout=300):
         chunk_summaries = None
 
         if folder_path is not None:
@@ -987,38 +1233,39 @@ class LLM_Analyze_Prompt_Thread(QThread):
             """ 프로젝트 코드 파일을 분석하고 OpenAI로 평가 """
             file_paths = self.get_file_list(folder_path=folder_path)
             if len(file_paths) == 0:
-                self.finished_analyze_sig("Invalid File or Directory.")
-                self.running = False
-                return False, None
+                return "[Error] File or Directory not existed."
 
-            file_metadata, ret = self.read_files(file_paths=file_paths)
-            if not file_metadata or not ret:
-                self.finished_analyze_sig("Nothing to Read.")
-                self.running = False
-                return False, None
+            file_metadata, error_msg = self.read_files(file_paths=file_paths)
+            if len(file_metadata) == 0:
+                return f"[Error] File Reading Error\n{error_msg}"
 
-            chunk_summaries = self.summarize_chunks(file_metadata=file_metadata, max_length=max_length,
-                                                    using_model=using_model)
+            chunk_summaries, ret = self.summarize_chunks(file_metadata=file_metadata, max_length=max_length,
+                                                         using_model=using_model, timeout=timeout)
+            if ret:
+                if len(chunk_summaries) == 0:
+                    return f"[Error] Fail to Chunk Summary"
+            else:
+                return "\n".join(chunk_summaries)
 
-        ret, result_message = self.generate_final_analysis(chunk_summaries=chunk_summaries, using_model=using_model,
-                                                           using_prompt=prompt)
-        return ret, result_message
+        result_message = self.generate_final_analysis(chunk_summaries=chunk_summaries, using_model=using_model,
+                                                      using_prompt=prompt, timeout=timeout)
+        return result_message
 
     def run(self) -> None:
         # 코드 작성
-        result_message = ""
-
-        if not self.api_key:
-            self.finished_analyze_sig.emit(
-                "OpenAI API Key not found. Please set the OPENAI_API_KEY environment variable.")
-            self.running = False
-
-        if self.running:
-            ret, result_message = self.analyze_project(folder_path=self.root_dir, using_model=self.llm,
-                                                       prompt=self.prompt)
-            if not ret:
-                if "timed out" not in result_message.lower():
-                    result_message = "Fail to Analyze"
+        if self.api_key is None:
+            result_message = "[Error] Set the OPENAI_API_KEY environment variable"
+        else:
+            try:
+                self.client = openai.OpenAI(api_key=self.api_key)
+                result_message = self.analyze_project(folder_path=self.root_dir, using_model=self.llm,
+                                                      prompt=self.prompt, timeout=self.timeout)
+            except AuthenticationError:
+                result_message = "Authentication Error: Please check your OpenAI API key."
+            except OpenAIError as e:
+                result_message = f"API Request Error: {str(e)}"
+            except Exception as e:
+                result_message = f"An unexpected error occurred: {str(e)}"
 
         self.finished_analyze_sig.emit(result_message)
 

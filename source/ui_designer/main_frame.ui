@@ -40,8 +40,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>69</width>
-            <height>432</height>
+            <width>73</width>
+            <height>418</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_2"/>
@@ -60,6 +60,13 @@
           </size>
          </property>
         </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="deselectpushButton">
+         <property name="text">
+          <string>Deselect</string>
+         </property>
+        </widget>
        </item>
       </layout>
      </widget>
@@ -114,7 +121,7 @@
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>1046</width>
+                   <width>882</width>
                    <height>580</height>
                   </rect>
                  </property>
@@ -162,6 +169,30 @@
                  </size>
                 </property>
                </spacer>
+              </item>
+              <item>
+               <layout class="QGridLayout" name="gridLayout_3">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label">
+                  <property name="text">
+                   <string>Time Out [sec.]</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QLineEdit" name="timeoutlineEdit">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="text">
+                   <string>300</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
               </item>
              </layout>
             </widget>
@@ -282,13 +313,6 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="deselectpushButton">
-           <property name="text">
-            <string>Deselect</string>
-           </property>
-          </widget>
-         </item>
-         <item>
           <widget class="QRadioButton" name="popctrl_radioButton">
            <property name="text">
             <string>pop control</string>
@@ -316,16 +340,16 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="save_pushButton">
+          <widget class="QPushButton" name="prompt_clear_pushButton">
            <property name="text">
-            <string>Save</string>
+            <string>Prompt Clear</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="prompt_clear_pushButton">
+          <widget class="QPushButton" name="save_pushButton">
            <property name="text">
-            <string>Prompt Clear</string>
+            <string>Prompt Save</string>
            </property>
           </widget>
          </item>
