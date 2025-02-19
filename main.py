@@ -47,8 +47,8 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.mainFrame_ui = rt.Ui_MainWindow()
         self.mainFrame_ui.setupUi(self)
         self.mainFrame_ui.explorer_frame.setMinimumWidth(300)  # 최소 너비 설정
-        self.mainFrame_ui.explorer_frame.hide()
-        self.mainFrame_ui.explore_pushButton.setText("Show")
+        # self.mainFrame_ui.explorer_frame.hide()
+        self.mainFrame_ui.explore_pushButton.setText("Hide")
 
         self.setupGPTModels()
         self.setDefaultPrompt()
@@ -309,7 +309,8 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                             unknown_max_limit=True)
         self.work_progress.send_user_close_event.connect(self.finished_load_thread)
 
-        self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, base_dir=BASE_DIR, exclusive=self.CONFIG_PARAMS["keyword"]["exclusive_dir"])
+        self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, base_dir=BASE_DIR,
+                                             exclusive=self.CONFIG_PARAMS["keyword"]["exclusive_dir"])
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
         self.t_load_project.copy_status_sig.connect(self.update_progressbar_label)
 
@@ -344,7 +345,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         llm_model = self.getSelectedModel()
         prompt = self.getLLMPrompt()
-        openai_key = "".join(self.CONFIG_PARAMS["openai_key"]["key"])
+
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key is None:
+            openai_key = "".join(self.CONFIG_PARAMS["openai_key"]["key"])
+
         timeout = int(self.mainFrame_ui.timeoutlineEdit.text())
 
         print("[Info] LLM Model")
