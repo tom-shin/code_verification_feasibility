@@ -1,24 +1,27 @@
 {
     "Version": "Feasibility for Code Verification 0.1.1 (made by tom.shin)",
-
     "openai_key": {
-        "key": ["sk-", "BucaNVm1ibsxPUnxvWq8T3BlbkFJRGWPgBcKMtn1aorR2eYX"],
+        "key": [
+            "sk-",
+            "BucaNVm1ibsxPUnxvWq8T3BlbkFJRGWPgBcKMtn1aorR2eYX"
+        ],
         "timeout": "300"
     },
-
     "keyword": {
-        "exclusive_dir": [".git", ".idea", "pycache", ".zip"],
-        "llm_models": ["gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+        "exclusive_dir": [
+            ".git",
+            ".idea",
+            "pycache",
+            ".zip"
+        ],
+        "llm_models": [
+            "gpt-4o-mini",
+            "gpt-4-turbo",
+            "gpt-4",
+            "gpt-3.5-turbo"
+        ],
         "pre_prompt": [
-            "You are an expert in code evaluation. \n",
-            "The above is a summary of each part of the project, including file names and paths. ",
-            "Based on this, analyze the overall structure, relationships between files, code quality, ",
-            "and identify any issues or bugs in the code. ",
-            "Also, suggest improvements and provide example code improvements. ",
-            "and assess its quality using measurable metrics such as reliability,",
-            "F1 score, or other relevant code quality indicators. Provide a numerical score along with a",
-            "detailed explanation of the reasoning behind your assessment, including the logic used to determine the score.\n",
-            "Please provide the analysis and improvement suggestions in Korean"
+            "You are an expert in code evaluation.\nThe above is a summary of each part of the project, including file names and paths. Based on this, analyze the overall structure, relationships between files, code quality, and identify any issues or bugs in the code. Also, suggest improvements and provide example code improvements. and assess its quality using measurable metrics such as reliability, F1 score, or other relevant code quality indicators. Provide a numerical score along with a detailed explanation of the reasoning behind your assessment, including the logic used to determine the score.\n\nPlease provide the analysis and improvement suggestions in Korean\n"
         ]
     }
 }

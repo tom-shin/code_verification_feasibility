@@ -132,21 +132,9 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         return text
 
     def save_prompt(self):
-        new_text = self.getLLMPrompt()
-        file_path = os.path.join(BASE_DIR, "source", "__init__.py")
-
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        # 2. keyword 딕셔너리의 pre_prompt 부분을 찾아 수정
-        pattern = r'("pre_prompt": \[\s*)(.*?)\s*(\])'  # pre_prompt 리스트를 찾는 정규식
-        replacement = rf'\1{repr(new_text)}, \2\3'  # 새로운 텍스트를 추가
-
-        modified_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
-
-        # 3. 변경된 내용을 a.py 파일에 다시 쓰기
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(modified_content)
+        self.CONFIG_PARAMS["keyword"]["pre_prompt"] = [self.getLLMPrompt()]
+        control_parameter = os.path.join(BASE_DIR, "source", "control_parameter.json")
+        json_dump_f(file_path=control_parameter, data=self.CONFIG_PARAMS, use_encoding=False)
 
     def connectSlotSignal(self):
         """ sys.stdout redirection """
@@ -165,7 +153,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.mainFrame_ui.deselectpushButton.clicked.connect(self.deselect_file_dir)
 
         self.mainFrame_ui.save_pushButton.clicked.connect(self.save_prompt)
-        self.mainFrame_ui.save_pushButton.hide()
 
         # Connect double-click signal to handler
         # self.tree_view.doubleClicked.connect(self.file_double_clicked)
