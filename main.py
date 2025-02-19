@@ -131,10 +131,20 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         return text
 
+    def getTestResult(self):
+        text = self.mainFrame_ui.llmresult_plainTextEdit.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
+        # combined_text = "".join(text)
+
+        return text
+
     def save_prompt(self):
         self.CONFIG_PARAMS["keyword"]["pre_prompt"] = [self.getLLMPrompt()]
         control_parameter = os.path.join(BASE_DIR, "source", "control_parameter.json")
         json_dump_f(file_path=control_parameter, data=self.CONFIG_PARAMS, use_encoding=False)
+
+    def get_prompt(self):
+        text = self.CONFIG_PARAMS["keyword"]["pre_prompt"]
+        self.mainFrame_ui.prompt_window.setText("".join(text))
 
     def connectSlotSignal(self):
         """ sys.stdout redirection """
@@ -153,6 +163,8 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.mainFrame_ui.deselectpushButton.clicked.connect(self.deselect_file_dir)
 
         self.mainFrame_ui.save_pushButton.clicked.connect(self.save_prompt)
+
+        self.mainFrame_ui.get_pushButton.clicked.connect(self.get_prompt)
 
         # Connect double-click signal to handler
         # self.tree_view.doubleClicked.connect(self.file_double_clicked)
@@ -305,6 +317,19 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.work_progress.show_progress()
 
+    def saveTestResult(self):
+        result_text = self.getTestResult()
+
+        # 현재 날짜 및 시간을 'YYYYMMDD_HHMMSS' 형식으로 생성
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"result_{timestamp}.md"
+
+        file_path = os.path.join(BASE_DIR, "Result", file_name).replace("\\", "/")
+
+        # 파일 저장
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(result_text)
+
     def llm_analyze_result(self, message=None):
         if self.work_progress is not None:
             self.work_progress.close()
@@ -321,6 +346,8 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                 # append 쓰기
                 # self.mainFrame_ui.llmresult_plainTextEdit.appendPlainText(message)
 
+        self.saveTestResult()
+
     def start_analyze(self):
         selected_indexes = self.tree_view.selectedIndexes()
 
@@ -328,7 +355,18 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         if selected_indexes:
             file_path = self.file_model.filePath(selected_indexes[0])
         else:
-            print("[Info] 파일 또는 폴더를 선택하지 않았습니다. 기본 prompt 창에 있는 내용 기반으로 분석합니다")
+            answer = QtWidgets.QMessageBox.question(self,
+                                                    "Confirm ...",
+                                                    "분석할 코드 폴더를 선택하지 않았습니다.\n 아래 Prompt 윈도우 내용으로 진행 할 까요?",
+                                                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+
+            if answer == QtWidgets.QMessageBox.No:
+                return
+
+        result_dir = os.path.join(BASE_DIR, "Result").replace("\\", "/")
+
+        # 폴더가 없으면 생성
+        os.makedirs(result_dir, exist_ok=True)
 
         llm_model = self.getSelectedModel()
         prompt = self.getLLMPrompt()

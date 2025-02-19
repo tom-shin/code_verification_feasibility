@@ -109,7 +109,7 @@
                    <x>0</x>
                    <y>0</y>
                    <width>882</width>
-                   <height>580</height>
+                   <height>551</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_11">
@@ -278,17 +278,35 @@
         </widget>
        </item>
        <item>
-        <widget class="QTextBrowser" name="prompt_window">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="readOnly">
-          <bool>false</bool>
+        <widget class="Line" name="line">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
          </property>
         </widget>
+       </item>
+       <item>
+        <layout class="QGridLayout" name="gridLayout_4">
+         <item row="1" column="0">
+          <widget class="QTextBrowser" name="prompt_window">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="readOnly">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_2">
+           <property name="text">
+            <string>Input Your Prompt</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_4">
@@ -329,14 +347,21 @@
          <item>
           <widget class="QPushButton" name="prompt_clear_pushButton">
            <property name="text">
-            <string>Prompt Clear</string>
+            <string>Clear Prompt</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="get_pushButton">
+           <property name="text">
+            <string>Get Prompt</string>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QPushButton" name="save_pushButton">
            <property name="text">
-            <string>Prompt Save</string>
+            <string>Save Prompt</string>
            </property>
           </widget>
          </item>
