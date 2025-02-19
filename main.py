@@ -258,11 +258,9 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         if self.work_progress is not None:
             self.work_progress.close()
-            self.work_progress.deleteLater()
 
         if self.t_load_project is not None:
             self.t_load_project.stop()
-            self.t_load_project.deleteLater()
 
             # 선택된 항목 초기화
             self.deselect_file_dir()
@@ -346,13 +344,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     def llm_analyze_result(self, message=None):
         if self.work_progress is not None:
             self.work_progress.close()
-            self.work_progress.deleteLater()
 
         if self.llm_analyze_instance is not None:
             self.llm_analyze_instance.find_and_stop_qthreads()
             self.llm_analyze_instance.stop_all_threads()
             self.llm_analyze_instance.stop()
-            self.llm_analyze_instance.deleteLater()
 
             if message is not None:
                 # 덮어쓰기
