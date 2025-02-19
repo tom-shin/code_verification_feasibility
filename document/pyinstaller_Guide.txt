@@ -1,0 +1,5 @@
+pip install pyinstaller  # Must be installed in your project environment
+pip install py2exe-gui
+
+실행
+python -m py2exe_gui  # `_`, not `-`

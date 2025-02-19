@@ -719,7 +719,7 @@ class LoadDir_Thread(QThread):
     finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
     copy_status_sig = pyqtSignal(str, int)  # ret, failed_pairs, memory_profile 전달
 
-    def __init__(self, m_source_dir, base_dir, exclusive):
+    def __init__(self, m_source_dir, BASE_DIR, exclusive):
         super().__init__()
         self.running = True
         self.exclusive = exclusive
@@ -727,15 +727,15 @@ class LoadDir_Thread(QThread):
         self.src_dir = m_source_dir.replace("\\", "/")
 
         unique_id = str(uuid.uuid4())  # 고유한 UUID 생성
-        self.target_dir = os.path.join(base_dir, f"root_temp_{unique_id}", os.path.basename(self.src_dir)).replace("\\",
+        self.target_dir = os.path.join(BASE_DIR, f"root_temp_{unique_id}", os.path.basename(self.src_dir)).replace("\\",
                                                                                                                    "/")
 
-        self.cleanup_root_temp_folders(base_dir=base_dir)
+        self.cleanup_root_temp_folders(BASE_DIR=BASE_DIR)
 
     @staticmethod
-    def cleanup_root_temp_folders(base_dir):
+    def cleanup_root_temp_folders(BASE_DIR):
         """temp_dir 내에서 root_temp_로 시작하는 모든 폴더를 삭제합니다."""
-        for root, dirs, files in os.walk(base_dir, topdown=False):
+        for root, dirs, files in os.walk(BASE_DIR, topdown=False):
             for dir_name in dirs:
                 # 'root_temp_'로 시작하는 폴더를 찾기
                 if dir_name.startswith("root_temp_"):

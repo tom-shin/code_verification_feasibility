@@ -2,10 +2,13 @@
 
 from source.__init__ import *
 
-if getattr(sys, 'frozen', False):
-    BASE_DIR = sys._MEIPASS
+if getattr(sys, 'frozen', False):  # PyInstaller로 패키징된 경우
+    BASE_DIR = os.path.dirname(sys.executable)  # 실행 파일이 있는 폴더
+    RESOURCE_DIR = sys._MEIPASS  # 임시 폴더(내부 리소스 저장됨)
 else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # 일반 Python 스크립트 실행 시
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    RESOURCE_DIR = BASE_DIR  # 개발 환경에서는 현재 폴더 사용
+  
 
 
 def load_module_func(module_name):
@@ -28,8 +31,15 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
-        control_parameter = os.path.join(BASE_DIR, "source", "control_parameter.json")
-        _, self.CONFIG_PARAMS = json_load_f(control_parameter, use_encoding=False)
+        # 실행 파일이 있는 폴더에 저장할 실제 JSON 파일 경로
+        control_parameter_path = os.path.join(BASE_DIR, "control_parameter.json")
+
+        # 만약 실행 폴더에 control_parameter.json이 없으면, 임시 폴더에서 복사
+        if not os.path.exists(control_parameter_path):
+            original_path = os.path.join(RESOURCE_DIR, "source", "control_parameter.json")
+            shutil.copyfile(original_path, control_parameter_path)            
+
+        _, self.CONFIG_PARAMS = json_load_f(control_parameter_path, use_encoding=False)
 
         self.llm_analyze_instance = None
         self.t_load_project = None
@@ -139,8 +149,9 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     def save_prompt(self):
         self.CONFIG_PARAMS["keyword"]["pre_prompt"] = [self.getLLMPrompt()]
-        control_parameter = os.path.join(BASE_DIR, "source", "control_parameter.json")
-        json_dump_f(file_path=control_parameter, data=self.CONFIG_PARAMS, use_encoding=False)
+        # control_parameter_path = os.path.join(BASE_DIR, "source", "control_parameter.json")
+        control_parameter_path = os.path.join(BASE_DIR, "control_parameter.json")
+        json_dump_f(file_path=control_parameter_path, data=self.CONFIG_PARAMS, use_encoding=False)
 
     def get_prompt(self):
         text = self.CONFIG_PARAMS["keyword"]["pre_prompt"]
@@ -308,7 +319,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                             unknown_max_limit=True)
         self.work_progress.send_user_close_event.connect(self.finished_load_thread)
 
-        self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, base_dir=BASE_DIR,
+        self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, BASE_DIR=BASE_DIR,
                                              exclusive=self.CONFIG_PARAMS["keyword"]["exclusive_dir"])
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
         self.t_load_project.copy_status_sig.connect(self.update_progressbar_label)
