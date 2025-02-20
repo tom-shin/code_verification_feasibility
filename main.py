@@ -201,7 +201,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     def setupGPTModels(self):
         row = 0  # 그리드 레이아웃의 첫 번째 행
-        for index, name in enumerate(self.CONFIG_PARAMS["keyword"]["llm_models"]):
+        for index, name in enumerate(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["llm_models"]):
             radio_button = QRadioButton(name)  # 라디오 버튼 생성
             if index == 0:  # 첫 번째 요소는 기본적으로 체크되도록 설정
                 radio_button.setChecked(True)
@@ -426,18 +426,18 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                                            QtWidgets.QMessageBox.Yes)
                 return
 
-        result_dir = os.path.join(BASE_DIR, "Result").replace("\\", "/")
-
+        
         # 폴더가 없으면 생성
+        result_dir = os.path.join(BASE_DIR, "Result").replace("\\", "/")
         os.makedirs(result_dir, exist_ok=True)
 
         llm_model = self.getSelectedModel()
         prompt = self.getLLMPrompt()
         language = self.getLanguage()
 
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key is None:
-            openai_key = "".join(self.CONFIG_PARAMS["openai_key"]["key"])
+        llm_key = os.getenv("OPENAI_API_KEY")
+        if llm_key is None:
+            llm_key = "".join(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["key"])
 
         timeout = int(self.mainFrame_ui.timeoutlineEdit.text())
 
@@ -447,6 +447,16 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         print(f"-->{prompt}")
         print("[Info] Time Out")
         print(f"-->{timeout} s")
+        ctrl_params = {
+            "project_src_file": file_path,
+            "user_contents": user_contents,
+            "prompt": prompt,
+            "llm_model": llm_model,
+            "llm_key": llm_key,
+            "max_token_limit": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["max_limit_token"],
+            "timeout": int(timeout),
+            "language": language            
+        }
 
         if self.mainFrame_ui.popctrl_radioButton.isChecked():
             modal_display = False
@@ -460,14 +470,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                             self_onCountChanged_params=True
                                             )
 
-        self.llm_analyze_instance = LLM_Analyze_Prompt_Thread(project_src_file=file_path,
-                                                              user_contents=user_contents,
-                                                              prompt=prompt,
-                                                              llm_model=llm_model,
-                                                              openai_key=openai_key,
-                                                              language=language,
-                                                              timeout=int(timeout)
-                                                              )
+        self.llm_analyze_instance = LLM_Analyze_Prompt_Thread(ctrl_params=ctrl_params)
         self.llm_analyze_instance.finished_analyze_sig.connect(self.llm_analyze_result)
         self.llm_analyze_instance.chunk_analyzed_sig.connect(self.chunking_result)
         self.llm_analyze_instance.start()

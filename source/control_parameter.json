@@ -1,12 +1,32 @@
 {
     "Version": "Feasibility for Code Verification 0.2.0 (made by tom.shin)",
-    "openai_key": {
-        "key": [
-            "sk-",
-            "BucaNVm1ibsxPUnxvWq8T3BlbkFJRGWPgBcKMtn1aorR2eYX"
-        ],
-        "timeout": "300"
+
+    "select_llm": "openai",
+
+    "llm_company":{
+
+        "openai": {
+            "key": ["sk-", "BucaNVm1ibsxPUnxvWq8T3BlbkFJRGWPgBcKMtn1aorR2eYX"],
+            "llm_models": [
+                "gpt-4o-mini",
+                "gpt-4-turbo",
+                "gpt-4",
+                "gpt-3.5-turbo"
+                ],
+            "timeout": "300",
+            "max_limit_token": 1000
+        },
+        "reserved": {
+            "key": ["xxx-", "xxxxxxxxxx"],
+            "llm_models": [
+                "xxx",
+                "xxx"
+                ],
+            "timeout": "300",
+            "max_limit_token": 1000
+        }
     },
+        
     "keyword": {
         "filter":{
             "include": [
@@ -31,12 +51,7 @@
                 "Gen-6"
                 ]
         },
-        "llm_models": [
-            "gpt-4o-mini",
-            "gpt-4-turbo",
-            "gpt-4",
-            "gpt-3.5-turbo"
-        ],
+        
         "x_default_prompt": [
             "당신은 C언어 코드 전문가야. 최소 경력이 20년 이상된. 내가 전달한 코드는 C 코드인데 코드 검사 해 주고 버그 찾아 주고 수정 해 줘\n"
         ],

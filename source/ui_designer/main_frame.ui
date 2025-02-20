@@ -365,7 +365,7 @@
          </widget>
          <widget class="QWidget" name="tab_3">
           <attribute name="title">
-           <string>Chunking Result</string>
+           <string>Summarize Chunks Result</string>
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_3">
            <item>
@@ -406,7 +406,7 @@
          </widget>
          <widget class="QWidget" name="tab_4">
           <attribute name="title">
-           <string>Embedding Result</string>
+           <string>Summarize Embedded Result</string>
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_9">
            <item>

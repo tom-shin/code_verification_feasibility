@@ -867,20 +867,19 @@ class LLM_Analyze_Prompt_Thread(QThread):
     finished_analyze_sig = pyqtSignal(str)
     chunk_analyzed_sig = pyqtSignal(str)
 
-    def __init__(self, project_src_file=None, user_contents=None, prompt=None, llm_model="gpt-4o-mini", openai_key=None,
-                 language="english", timeout=300):
+    def __init__(self, ctrl_params):
         super().__init__()
 
         self.running = True
-        self.root_dir = project_src_file
-        self.prompt = prompt
-        self.llm = llm_model
-        self.timeout = timeout
-        self.user_contents = user_contents
-        self.language = language
+        self.root_dir = ctrl_params["project_src_file"]
+        self.prompt = ctrl_params["prompt"]
+        self.llm = ctrl_params["llm_model"]
+        self.timeout = ctrl_params["timeout"]
+        self.user_contents = ctrl_params["user_contents"]
+        self.language = ctrl_params["language"]
+        self.api_key = ctrl_params["llm_key"]
+        self.max_token_limit = ctrl_params["max_token_limit"]
 
-        # OpenAI API 설정
-        self.api_key = openai_key
         self.client = None
 
         self.combined_content = ""
@@ -1043,8 +1042,8 @@ class LLM_Analyze_Prompt_Thread(QThread):
         else:
             return "\n".join(chunk_summaries)
 
-        chunking_data = "\n\n".join(chunk_summaries)
-        self.chunk_analyzed_sig.emit(chunking_data)
+        summarize_chunk_data = "\n\n".join(chunk_summaries)
+        self.chunk_analyzed_sig.emit(summarize_chunk_data)
 
         # 2. chunking 데이터를 LLM에 넣어 분석 결과 도출 단계
         result_message = self.generate_final_analysis(chunk_summaries=chunk_summaries, using_model=using_model,
@@ -1059,7 +1058,7 @@ class LLM_Analyze_Prompt_Thread(QThread):
             try:
                 self.client = openai.OpenAI(api_key=self.api_key)
                 result_message = self.analyze_project(folder_path=self.root_dir, user_contents=self.user_contents,
-                                                      using_model=self.llm,
+                                                      max_length=self.max_token_limit, using_model=self.llm,
                                                       prompt=self.prompt, language=self.language, timeout=self.timeout)
 
             except openai.AuthenticationError:
