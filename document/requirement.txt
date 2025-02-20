@@ -3,3 +3,5 @@ openai
 PyQt5
 PyQt5-tools
 httpx
+fpdf
+reportlab

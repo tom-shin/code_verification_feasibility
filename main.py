@@ -8,7 +8,6 @@ if getattr(sys, 'frozen', False):  # PyInstaller로 패키징된 경우
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     RESOURCE_DIR = BASE_DIR  # 개발 환경에서는 현재 폴더 사용
-  
 
 
 def load_module_func(module_name):
@@ -37,7 +36,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         # 만약 실행 폴더에 control_parameter.json이 없으면, 임시 폴더에서 복사
         if not os.path.exists(control_parameter_path):
             original_path = os.path.join(RESOURCE_DIR, "source", "control_parameter.json")
-            shutil.copyfile(original_path, control_parameter_path)            
+            shutil.copyfile(original_path, control_parameter_path)
 
         _, self.CONFIG_PARAMS = json_load_f(control_parameter_path, use_encoding=False)
 
@@ -62,6 +61,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.setupGPTModels()
         self.setDefaultPrompt()
+        self.setDefaultUserContent()
 
         # 탐색기 뷰 추가
         if self.tree_view is None:
@@ -135,14 +135,32 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     def cleanPromptBrowser(self):
         self.mainFrame_ui.prompt_window.clear()
 
+    def getLanguage(self):
+        language = "English"
+
+        if self.mainFrame_ui.korean_radioButton.isChecked():
+            language = "Korean"
+
+        return language
+
     def getLLMPrompt(self):
         text = self.mainFrame_ui.prompt_window.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
         # combined_text = "".join(text)
 
         return text
 
-    def getTestResult(self):
-        text = self.mainFrame_ui.llmresult_plainTextEdit.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
+    def getUserContents(self):
+        text = self.mainFrame_ui.user_textEdit.toPlainText()
+        return text
+
+    def getSummaryResult(self):
+        text = self.mainFrame_ui.llmresult_textEdit.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
+        # combined_text = "".join(text)
+
+        return text
+
+    def getChunkResult(self):
+        text = self.mainFrame_ui.chunk_textEdit.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
         # combined_text = "".join(text)
 
         return text
@@ -194,6 +212,10 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     def setDefaultPrompt(self):
         prompt = "".join(self.CONFIG_PARAMS["keyword"]["pre_prompt"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
         self.mainFrame_ui.prompt_window.setText(prompt)
+
+    def setDefaultUserContent(self):
+        text = self.CONFIG_PARAMS["keyword"]["example_content"]
+        self.mainFrame_ui.user_textEdit.setPlainText("".join(text))
 
     def getSelectedModel(self):
         # 선택된 라디오 버튼이 무엇인지 확인
@@ -329,7 +351,10 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.work_progress.show_progress()
 
     def saveTestResult(self):
-        result_text = self.getTestResult()
+        result_summary = self.getSummaryResult()
+        result_chunk = self.getChunkResult()
+
+        overall_report = f"[Summary Result]\n\n{result_summary}\n\n\n[Detailed Analysis]\n\n{result_chunk}\n\n -End-"
 
         # 현재 날짜 및 시간을 'YYYYMMDD_HHMMSS' 형식으로 생성
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -339,7 +364,17 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         # 파일 저장
         with open(file_path, "w", encoding="utf-8") as f:
-            f.write(result_text)
+            f.write(overall_report)
+
+        # # PDF 생성
+        # file_name = f"result_{timestamp}.pdf"
+        # c = canvas.Canvas(file_path)
+        # c.setFont("Helvetica", 12)  # 폰트 설정
+        # overall_report = "이것은 PDF 저장 테스트입니다.\n새로운 줄도 가능합니다!"
+        # c.drawString(100, 750, overall_report)  # 텍스트 위치 조정
+        #
+        # # PDF 저장
+        # c.save()
 
     def llm_analyze_result(self, message=None):
         if self.work_progress is not None:
@@ -352,26 +387,40 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
             if message is not None:
                 # 덮어쓰기
-                self.mainFrame_ui.llmresult_plainTextEdit.setPlainText(message)
+                self.mainFrame_ui.llmresult_textEdit.setMarkdown(message)
 
                 # append 쓰기
-                # self.mainFrame_ui.llmresult_plainTextEdit.appendPlainText(message)
+                # self.mainFrame_ui.llmresult_textEdit.appendPlainText(message)
 
         self.saveTestResult()
+        self.mainFrame_ui.tabWidget.setCurrentIndex(1)
+
+    def chunking_result(self, chunk_data):
+        self.mainFrame_ui.chunk_textEdit.setMarkdown(chunk_data)
 
     def start_analyze(self):
         selected_indexes = self.tree_view.selectedIndexes()
 
         file_path = None
+        user_contents = ""
+
         if selected_indexes:
             file_path = self.file_model.filePath(selected_indexes[0])
         else:
             answer = QtWidgets.QMessageBox.question(self,
-                                                    "Confirm ...",
-                                                    "분석할 코드 폴더를 선택하지 않았습니다.\n 아래 Prompt 윈도우 내용으로 진행 할 까요?",
+                                                    "Information ...",
+                                                    "분석할 코드 폴더를 선택하지 않았습니다.\n Input Contents(code, text ...) 내용으로 진행 할 까요?",
                                                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
 
             if answer == QtWidgets.QMessageBox.No:
+                return
+
+            user_contents = self.getUserContents()
+            if not user_contents.split():
+                answer = QtWidgets.QMessageBox.information(self,
+                                                           "Information ...",
+                                                           "분석할 Contents가 존재하지 않습니다",
+                                                           QtWidgets.QMessageBox.Yes)
                 return
 
         result_dir = os.path.join(BASE_DIR, "Result").replace("\\", "/")
@@ -381,6 +430,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         llm_model = self.getSelectedModel()
         prompt = self.getLLMPrompt()
+        language = self.getLanguage()
 
         openai_key = os.getenv("OPENAI_API_KEY")
         if openai_key is None:
@@ -409,12 +459,15 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.work_progress.send_user_close_event.connect(self.llm_analyze_result)
 
         self.llm_analyze_instance = LLM_Analyze_Prompt_Thread(project_src_file=file_path,
+                                                              user_contents=user_contents,
                                                               prompt=prompt,
                                                               llm_model=llm_model,
                                                               openai_key=openai_key,
+                                                              language=language,
                                                               timeout=int(timeout)
                                                               )
         self.llm_analyze_instance.finished_analyze_sig.connect(self.llm_analyze_result)
+        self.llm_analyze_instance.chunk_analyzed_sig.connect(self.chunking_result)
         self.llm_analyze_instance.start()
 
         self.work_progress.show_progress()
