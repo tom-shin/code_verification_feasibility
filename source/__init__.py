@@ -48,8 +48,7 @@ def PRINT_(*args):
 ANSI_ESCAPE = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
 
-class ProgressDialog(QDialog):  # This class will handle both modal and non-modal dialogs
-    send_user_close_event = pyqtSignal()
+class ProgressDialog(QDialog):  # This class will handle both modal and non-modal dialogs    
 
     def __init__(self, message, modal=True, show=False, parent=None, unknown_max_limit=False,
                  self_onCountChanged_params=False):
@@ -136,7 +135,6 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
 
     def closeEvent(self, event):
         self.timer.stop()
-        self.send_user_close_event.emit()
         event.accept()
 
     def toggle_radio_button(self):
@@ -593,43 +591,6 @@ def remove_alldata_files_except_specific_extension(directory, extension):
             shutil.rmtree(dir_path)  # 디렉토리 삭제
 
 
-class ColonLineHighlighter(QSyntaxHighlighter):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        # 파란색 형식 (':'로 끝나는 줄)
-        self.colon_format = QTextCharFormat()
-        self.colon_format.setForeground(QColor("blue"))
-
-        # 빨간색 형식 (특정 키워드)
-        self.keyword_format = QTextCharFormat()
-        self.keyword_format.setForeground(QColor("red"))
-
-        # 녹색 형식 (특정 키워드와 ':'로 끝나는 줄)
-        self.green_format = QTextCharFormat()
-        self.green_format.setForeground(QColor("#00CED1"))
-
-        # 강조할 키워드 설정
-        self.keywords = re.compile(r'\b(global_config|model_config)\b')
-
-        # tflite, onnx, caffemodel 키워드 설정
-        self.special_keywords = re.compile(r'\b(.tflite|.onnx|.caffemodel)\b')
-
-    def highlightBlock(self, text):
-        # 'tflite', 'onnx', 'caffemodel'이 포함되고 ':'로 끝나는 경우 녹색으로 강조
-        if self.special_keywords.search(text) and text.strip().endswith(':'):
-            self.setFormat(0, len(text), self.green_format)
-
-        # 키워드가 포함된 경우 빨간색 강조
-        for match in self.keywords.finditer(text):
-            start, end = match.span()
-            self.setFormat(start, end - start, self.keyword_format)
-
-        # ':'로 끝나는 줄에 파란색 적용 (키워드가 포함되지 않은 경우)
-        if text.strip().endswith(':') and not self.keywords.search(text) and not self.special_keywords.search(text):
-            self.setFormat(0, len(text), self.colon_format)
-
-
 def separate_folders_and_files(directory_path):
     directory, file_name = os.path.split(directory_path)
 
@@ -690,6 +651,43 @@ def stop_all_threads():
             thread.join(timeout=1)  # 1초 기다린 후 종료
 
 
+class ColonLineHighlighter(QSyntaxHighlighter):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # 파란색 형식 (':'로 끝나는 줄)
+        self.colon_format = QTextCharFormat()
+        self.colon_format.setForeground(QColor("blue"))
+
+        # 빨간색 형식 (특정 키워드)
+        self.keyword_format = QTextCharFormat()
+        self.keyword_format.setForeground(QColor("red"))
+
+        # 녹색 형식 (특정 키워드와 ':'로 끝나는 줄)
+        self.green_format = QTextCharFormat()
+        self.green_format.setForeground(QColor("#00CED1"))
+
+        # 강조할 키워드 설정
+        self.keywords = re.compile(r'\b(global_config|model_config)\b')
+
+        # tflite, onnx, caffemodel 키워드 설정
+        self.special_keywords = re.compile(r'\b(.tflite|.onnx|.caffemodel)\b')
+
+    def highlightBlock(self, text):
+        # 'tflite', 'onnx', 'caffemodel'이 포함되고 ':'로 끝나는 경우 녹색으로 강조
+        if self.special_keywords.search(text) and text.strip().endswith(':'):
+            self.setFormat(0, len(text), self.green_format)
+
+        # 키워드가 포함된 경우 빨간색 강조
+        for match in self.keywords.finditer(text):
+            start, end = match.span()
+            self.setFormat(start, end - start, self.keyword_format)
+
+        # ':'로 끝나는 줄에 파란색 적용 (키워드가 포함되지 않은 경우)
+        if text.strip().endswith(':') and not self.keywords.search(text) and not self.special_keywords.search(text):
+            self.setFormat(0, len(text), self.colon_format)
+
+
 class LoadDir_Thread(QThread):
     finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
     copy_status_sig = pyqtSignal(str, int)  # ret, failed_pairs, memory_profile 전달
@@ -722,8 +720,7 @@ class LoadDir_Thread(QThread):
         # 코드 작성
         self.copy_directory_structure_2()
 
-        if self.running:
-            self.finished_load_project_sig.emit(os.path.dirname(self.target_dir))
+        self.finished_load_project_sig.emit(os.path.dirname(self.target_dir))
 
     def copy_directory_structure_1(self):
         if os.path.exists(self.target_dir):
@@ -888,45 +885,6 @@ class LLM_Analyze_Prompt_Thread(QThread):
 
         self.combined_content = ""
         self.file_metadata = []  # 파일 경로와 파일명을 저장할 리스트
-
-    @staticmethod
-    def find_and_stop_qthreads():
-        app = QApplication.instance()
-        if app:
-            for widget in app.allWidgets():
-                if isinstance(widget, QThread) and widget is not QThread.currentThread():
-                    PRINT_(f"Stopping QThread: {widget}")
-                    widget.quit()
-                    widget.wait()
-
-        # QObject 트리에서 QThread 찾기
-        for obj in QObject.children(QApplication.instance()):
-            if isinstance(obj, QThread) and obj is not QThread.currentThread():
-                PRINT_(f"Stopping QThread: {obj}")
-                obj.quit()
-                obj.wait()
-
-    @staticmethod
-    def stop_all_threads():
-        current_thread = threading.current_thread()
-
-        for thread in threading.enumerate():
-            if thread is current_thread:  # 현재 실행 중인 main 스레드는 제외
-                continue
-
-            if isinstance(thread, threading._DummyThread):  # 더미 스레드는 제외
-                PRINT_(f"Skipping DummyThread: {thread.name}")
-                continue
-
-            PRINT_(f"Stopping Thread: {thread.name}")
-
-            if hasattr(thread, "stop"):  # stop() 메서드가 있으면 호출
-                thread.stop()
-            elif hasattr(thread, "terminate"):  # terminate() 메서드가 있으면 호출
-                thread.terminate()
-
-            if thread.is_alive():
-                thread.join(timeout=1)  # 1초 기다린 후 종료
 
     @staticmethod
     def get_file_list(folder_path):

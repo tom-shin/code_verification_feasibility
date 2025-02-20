@@ -290,50 +290,46 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.tree_view.clearSelection()  # 기존 선택된 항목 해제
         self.tree_view.setCurrentIndex(QModelIndex())  # 현재 인덱스 초기화
 
-    def finished_load_thread(self, m_dir=None):
+    def finished_load_thread(self, m_dir=None):    
+        # 선택된 항목 초기화
+        self.deselect_file_dir()
 
+        if m_dir is None:
+            return
+
+        # 선택한 폴더를 탐색기에서 갱신
+        self.file_model.setRootPath(m_dir)  # 루트 경로 설정
+
+        # QFileSystemModel이 이미 동일한 경로에 대해 캐시된 데이터를 가지고 있으면 갱신되지 않음
+        index = self.file_model.index(m_dir)  # m_dir의 인덱스를 가져옴
+
+        # 선택한 폴더가 유효한지 확인
+        if index.isValid():
+            PRINT_("valid directory index.", m_dir)
+
+            # 모델을 새로 설정하고 루트 인덱스를 다시 설정
+            self.tree_view.setModel(None)  # 기존 모델 제거
+            self.tree_view.setModel(self.file_model)  # 모델을 새로 설정
+
+            # 루트 경로 재설정
+            self.tree_view.setRootIndex(index)  # 새로운 루트로 설정
+
+            # 명시적으로 모델 갱신
+            self.tree_view.viewport().update()
+
+            self.ctrl_meta_info(show=True)
+
+            # explorer_verticalLayout에 이미 추가된 경우 다시 추가하지 않음
+            if self.tree_view.parent() is None:
+                self.mainFrame_ui.explorer_verticalLayout.addWidget(self.tree_view)
+
+            self.explore_window_ctrl(always_show=True)
+
+        else:
+            PRINT_("Error: Invalid directory index.", m_dir)
+        
         if self.work_progress is not None:
-            self.work_progress.close()
-
-        if self.t_load_project is not None:
-            self.t_load_project.stop()
-
-            # 선택된 항목 초기화
-            self.deselect_file_dir()
-
-            if m_dir is None:
-                return
-
-            # 선택한 폴더를 탐색기에서 갱신
-            self.file_model.setRootPath(m_dir)  # 루트 경로 설정
-
-            # QFileSystemModel이 이미 동일한 경로에 대해 캐시된 데이터를 가지고 있으면 갱신되지 않음
-            index = self.file_model.index(m_dir)  # m_dir의 인덱스를 가져옴
-
-            # 선택한 폴더가 유효한지 확인
-            if index.isValid():
-                PRINT_("valid directory index.", m_dir)
-
-                # 모델을 새로 설정하고 루트 인덱스를 다시 설정
-                self.tree_view.setModel(None)  # 기존 모델 제거
-                self.tree_view.setModel(self.file_model)  # 모델을 새로 설정
-
-                # 루트 경로 재설정
-                self.tree_view.setRootIndex(index)  # 새로운 루트로 설정
-
-                # 명시적으로 모델 갱신
-                self.tree_view.viewport().update()
-
-                self.ctrl_meta_info(show=True)
-
-                # explorer_verticalLayout에 이미 추가된 경우 다시 추가하지 않음
-                if self.tree_view.parent() is None:
-                    self.mainFrame_ui.explorer_verticalLayout.addWidget(self.tree_view)
-
-                self.explore_window_ctrl(always_show=True)
-
-            else:
-                PRINT_("Error: Invalid directory index.", m_dir)
+            self.work_progress.close()                
 
     def update_progressbar_label(self, file_name, value):
         if self.work_progress is not None:
@@ -353,8 +349,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.work_progress = ProgressDialog(modal=modal_display, message="Loading Selected Project Files", show=True,
                                             unknown_max_limit=True)
-        self.work_progress.send_user_close_event.connect(self.finished_load_thread)
-
+        
         self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, BASE_DIR=BASE_DIR,
                                              keyword_filter=self.CONFIG_PARAMS["keyword"]["filter"])
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
@@ -390,24 +385,18 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         # # PDF 저장
         # c.save()
 
-    def llm_analyze_result(self, message=None):
-        if self.work_progress is not None:
-            self.work_progress.close()
+    def llm_analyze_result(self, message):
+        # 덮어쓰기
+        self.mainFrame_ui.llmresult_textEdit.setMarkdown(message)
 
-        if self.llm_analyze_instance is not None:
-            self.llm_analyze_instance.find_and_stop_qthreads()
-            self.llm_analyze_instance.stop_all_threads()
-            self.llm_analyze_instance.stop()
-
-            if message is not None:
-                # 덮어쓰기
-                self.mainFrame_ui.llmresult_textEdit.setMarkdown(message)
-
-                # append 쓰기
-                # self.mainFrame_ui.llmresult_textEdit.appendPlainText(message)
+        # append 쓰기
+        # self.mainFrame_ui.llmresult_textEdit.appendPlainText(message)
 
         self.saveTestResult()
         self.mainFrame_ui.tabWidget.setCurrentIndex(1)
+
+        if self.work_progress is not None:
+            self.work_progress.close()
 
     def chunking_result(self, chunk_data):
         self.mainFrame_ui.chunk_textEdit.setMarkdown(chunk_data)
@@ -470,7 +459,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                             unknown_max_limit=True,
                                             self_onCountChanged_params=True
                                             )
-        self.work_progress.send_user_close_event.connect(self.llm_analyze_result)
 
         self.llm_analyze_instance = LLM_Analyze_Prompt_Thread(project_src_file=file_path,
                                                               user_contents=user_contents,
