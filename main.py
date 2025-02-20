@@ -50,6 +50,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         """ for main frame & widget """
         self.mainFrame_ui = None
         self.widget_ui = None
+        self.dialog = None
 
         # 기존 UI 로드
         rt = load_module_func(module_name="source.ui_designer.main_frame")
@@ -166,13 +167,13 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         return text
 
     def save_prompt(self):
-        self.CONFIG_PARAMS["keyword"]["pre_prompt"] = [self.getLLMPrompt()]
+        self.CONFIG_PARAMS["keyword"]["default_prompt"] = [self.getLLMPrompt()]
         # control_parameter_path = os.path.join(BASE_DIR, "source", "control_parameter.json")
         control_parameter_path = os.path.join(BASE_DIR, "control_parameter.json")
         json_dump_f(file_path=control_parameter_path, data=self.CONFIG_PARAMS, use_encoding=False)
 
     def get_prompt(self):
-        text = self.CONFIG_PARAMS["keyword"]["pre_prompt"]
+        text = self.CONFIG_PARAMS["keyword"]["default_prompt"]
         self.mainFrame_ui.prompt_window.setText("".join(text))
 
     def connectSlotSignal(self):
@@ -196,7 +197,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.mainFrame_ui.get_pushButton.clicked.connect(self.get_prompt)
 
         # Connect double-click signal to handler
-        # self.tree_view.doubleClicked.connect(self.file_double_clicked)
+        self.tree_view.doubleClicked.connect(self.file_double_clicked)
 
     def setupGPTModels(self):
         row = 0  # 그리드 레이아웃의 첫 번째 행
@@ -210,7 +211,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             row += 1  # 행 번호 증가
 
     def setDefaultPrompt(self):
-        prompt = "".join(self.CONFIG_PARAMS["keyword"]["pre_prompt"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
+        prompt = "".join(self.CONFIG_PARAMS["keyword"]["default_prompt"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
         self.mainFrame_ui.prompt_window.setText(prompt)
 
     def setDefaultUserContent(self):
@@ -224,30 +225,43 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                 PRINT_(f"Selected GPT model: {radio_button.text()}")  # 선택된 버튼의 텍스트 출력
                 return radio_button.text()
 
-    # def file_double_clicked(self, index):
-    #     """Handle double-click event on a file in the QTreeView."""
-    #     file_path = self.file_model.filePath(index)
-    #
-    #     if self.file_model.isDir(index):
-    #         PRINT_("Double-clicked directory:", file_path)
-    #         # Handle directory (e.g., open it, show contents, etc.)
-    #     else:
-    #         PRINT_("Double-clicked file:", file_path)
-    #         try:
-    #             with open(file_path, "r", encoding="utf-8") as file:
-    #                 while True:
-    #                     line = file.readline()  # 한 줄씩 읽기
-    #                     if not line:
-    #                         break  # 더 이상 읽을 줄이 없으면 종료
-    #                     cleaned_sentence = ANSI_ESCAPE.sub('', line)
-    #                     PRINT_(cleaned_sentence)  # 각 줄을 처리
-    #
-    #         except FileNotFoundError:
-    #             PRINT_("Error: The file was not found.")
-    #         except PermissionError:
-    #             PRINT_("Error: Permission denied.")
-    #         except Exception as e:
-    #             PRINT_(f"An unexpected error occurred: {e}")
+    def file_double_clicked(self, index):
+        """Handle double-click event on a file in the QTreeView."""
+        file_path = self.file_model.filePath(index)
+
+        if self.file_model.isDir(index):
+            PRINT_("Double-clicked directory:", file_path)
+            return
+            # Handle directory (e.g., open it, show contents, etc.)
+
+        rt = load_module_func(module_name="source.ui_designer.fileedit")
+
+        self.dialog = QtWidgets.QDialog()
+        ui = rt.Ui_Dialog()
+        ui.setupUi(self.dialog)
+        self.dialog.setWindowTitle(f"{file_path}")  # 원하는 제목을 설정
+        ui.fileedit_save.hide()
+
+        # 시그널 슬롯 연결 람다 사용해서 직접 인자를 넘기자...........
+        ui.fileedit_cancel.clicked.connect(self.dialog.close)
+
+        # QSyntaxHighlighter를 통해 ':'로 끝나는 줄을 파란색으로 강조 표시
+        # highlighter = ColonLineHighlighter(ui.textEdit.document())
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as file:
+                line = file.readlines()  # 모든 줄을 리스트로 반환
+
+        except Exception as e:
+            print(f"파일을 여는 중 오류 발생: {e}")
+            print(traceback.format_exc())  # 전체 오류 트레이스백 출력
+            sys.exit(1)  # 프로그램 종료 (1은 오류 코드, 0은 정상 종료)
+
+        model_config_str = "".join(line)
+
+        ui.textEdit.setPlainText(model_config_str)  # 변환된 문자열 설정
+        self.dialog.setWindowModality(QtCore.Qt.ApplicationModal)
+        self.dialog.show()
 
     def explore_window_ctrl(self, always_show=False):
         if always_show:
@@ -342,7 +356,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.work_progress.send_user_close_event.connect(self.finished_load_thread)
 
         self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, BASE_DIR=BASE_DIR,
-                                             exclusive=self.CONFIG_PARAMS["keyword"]["exclusive_dir"])
+                                             keyword_filter=self.CONFIG_PARAMS["keyword"]["filter"])
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
         self.t_load_project.copy_status_sig.connect(self.update_progressbar_label)
 

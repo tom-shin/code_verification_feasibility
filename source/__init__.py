@@ -110,7 +110,7 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
             self.progress_bar.setFormat("")  # No percentage displayed
 
         self.timer.timeout.connect(self.toggle_radio_button)
-        self.timer.start(500)  # 500ms interval
+        self.timer.start(100)  # 500ms interval
 
         self.cnt = 0
         self.self_onCountChanged_params = self_onCountChanged_params
@@ -292,32 +292,6 @@ def json_load_f(file_path, use_encoding=False):
 #     documents = loader.load()
 #     PRINT_("number of doc: ", len(documents))
 #     return documents
-
-
-# def get_directory(base_dir, user_defined_fmt=None, file_full_path=False):
-#     data = set()
-#
-#     for root, dirs, files in os.walk(base_dir):
-#         for exclusive in keyword["exclusive_dir"]:
-#             if exclusive in dirs:
-#                 dirs.remove(exclusive)
-#
-#         for file in files:
-#             if user_defined_fmt is None:
-#                 if any(file.endswith(ext) for ext in keyword["test_model"]):
-#                     if file_full_path:
-#                         data.add(os.path.join(root, file))
-#                     else:
-#                         data.add(root)
-#             else:
-#                 if any(file.endswith(ext) for ext in user_defined_fmt):
-#                     if file_full_path:
-#                         data.add(os.path.join(root, file))
-#                     else:
-#                         data.add(root)
-#
-#     unique_paths = sorted(data)
-#     return unique_paths
 
 
 def CheckDir(dir_):
@@ -720,10 +694,10 @@ class LoadDir_Thread(QThread):
     finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
     copy_status_sig = pyqtSignal(str, int)  # ret, failed_pairs, memory_profile 전달
 
-    def __init__(self, m_source_dir, BASE_DIR, exclusive):
+    def __init__(self, m_source_dir, BASE_DIR, keyword_filter):
         super().__init__()
         self.running = True
-        self.exclusive = exclusive
+        self.filter = keyword_filter
 
         self.src_dir = m_source_dir.replace("\\", "/")
 
@@ -757,41 +731,120 @@ class LoadDir_Thread(QThread):
 
         shutil.copytree(self.src_dir, self.target_dir)
 
-    def copy_directory_structure_2(self):
+    def copy_directory_structure_2(self, exclude=False):
+        """
+        exclude=True  → 제외 리스트에 있는 항목들을 제외한 나머지를 복사 (기본)
+        exclude=False → 특정 확장자를 가진 파일이 있는 경우에만 해당 폴더를 포함하여 복사
+        """
+        filter_name = "exclude" if exclude else "include"
+
         CheckDir(dir_=self.target_dir)
 
         cnt = 0
-        exclusive_list = self.exclusive  # 제외할 단어들 리스트
+        filter_list = self.filter  # 필터링할 단어 리스트
 
-        # src_dir의 모든 파일과 폴더를 재귀적으로 복사
+        # `include` 모드에서 확장자 리스트 설정
+        include_mode_active = not exclude and bool(filter_list["include"])
+        include_extensions = set(filter_list["include"]) if include_mode_active else set()
+
         for root, dirs, files in os.walk(self.src_dir):
             if not self.running:
                 PRINT_("force termination_main loop")
                 break
 
-            # 현재 폴더명이 exclusive_list에 포함된 단어를 포함하는지 체크
-            if any(excluded_word in os.path.basename(root) for excluded_word in exclusive_list):
-                continue  # 제외할 단어가 있으면 해당 폴더는 건너뜀
+            # `exclude` 모드인 경우 폴더 필터링
+            if exclude:
+                if any(excluded_word in os.path.basename(root) for excluded_word in filter_list["exclude"]):
+                    continue
+                dirs[:] = [d for d in dirs if not any(excluded_word in d for excluded_word in filter_list["exclude"])]
 
-            # dirs에서 제외할 폴더를 제거
-            dirs[:] = [d for d in dirs if not any(excluded_word in d for excluded_word in exclusive_list)]
+            # `include` 모드인 경우, 현재 폴더에 복사할 파일이 있는지 체크
+            valid_files = []
+            if include_mode_active:
+                for file in files:
+                    _, ext = os.path.splitext(file)
+                    if ext in include_extensions:
+                        valid_files.append(file)
 
-            # 현재 폴더의 상대 경로를 target_dir에 맞게 계산
+                if not valid_files:
+                    continue  # 포함할 파일이 없으면 폴더 자체를 복사하지 않음
+
+            # 현재 폴더의 상대 경로를 대상 폴더 기준으로 계산
             relative_path = os.path.relpath(root, self.src_dir).replace("\\", "/")
             destination_dir = os.path.join(self.target_dir, relative_path).replace("\\", "/")
 
             if not os.path.exists(destination_dir):
                 os.makedirs(destination_dir)
 
-            # 현재 폴더 내의 모든 파일을 복사
+            # 파일 복사
+            for file in valid_files if include_mode_active else files:
+                if not self.running:
+                    PRINT_("force termination_sub_loop")
+                    break
+
+                if exclude and any(excluded_word in file for excluded_word in filter_list["exclude"]):
+                    continue
+
+                source_file = os.path.join(root, file).replace("\\", "/")
+                destination_file = os.path.join(destination_dir, file).replace("\\", "/")
+                shutil.copy2(source_file, destination_file)
+
+                cnt += 1
+                self.copy_status_sig.emit(f"[{cnt}]   ../{os.path.basename(source_file)} copied", cnt)
+
+    def X_copy_directory_structure_2(self, exclude=False):
+        """
+        src_dir의 파일과 폴더를 대상 폴더로 복사하는 함수.
+        
+        exclude=True이면 제외 리스트에 있는 항목들을 제외한 나머지를 복사
+        exclude=False이면 포함 리스트에 있는 항목들만 복사        """
+
+        CheckDir(dir_=self.target_dir)
+
+        cnt = 0
+        filter_list = self.filter  # 필터링할 단어 리스트
+
+        # src_dir의 모든 파일과 폴더를 재귀적으로 탐색
+        for root, dirs, files in os.walk(self.src_dir):
+            if not self.running:
+                PRINT_("force termination_main loop")
+                break
+
+            # 디렉터리 필터링
+            if exclude:
+                # 제외 리스트에 있는 단어가 포함된 폴더는 건너뜀
+                if any(excluded_word in os.path.basename(root) for excluded_word in filter_list["exclude"]):
+                    continue
+                    # dirs에서 제외할 폴더를 제거
+                dirs[:] = [d for d in dirs if not any(excluded_word in d for excluded_word in filter_list["exclude"])]
+            else:
+                # 포함 리스트에 있는 단어가 포함되지 않은 폴더는 건너뜀
+                if not any(included_word in os.path.basename(root) for included_word in filter_list["include"]):
+                    continue
+                    # dirs에서 포함할 폴더만 유지
+                dirs[:] = [d for d in dirs if any(included_word in d for included_word in filter_list["include"])]
+
+            # 현재 폴더의 상대 경로를 대상 폴더 기준으로 계산
+            relative_path = os.path.relpath(root, self.src_dir).replace("\\", "/")
+            destination_dir = os.path.join(self.target_dir, relative_path).replace("\\", "/")
+
+            if not os.path.exists(destination_dir):
+                os.makedirs(destination_dir)
+
+            # 파일 필터링 및 복사
             for file in files:
                 if not self.running:
                     PRINT_("force termination_sub_loop")
                     break
 
-                # 파일명이 exclusive_list에 포함된 단어를 포함하는지 체크
-                if any(excluded_word in file for excluded_word in exclusive_list):
-                    continue  # 제외할 단어가 있으면 해당 파일은 건너뜀
+                if exclude:
+                    # 제외 리스트에 있는 단어가 포함된 파일은 건너뜀
+                    if any(excluded_word in file for excluded_word in filter_list["exclude"]):
+                        continue
+                else:
+                    # 포함 리스트에 있는 단어가 포함되지 않은 파일은 건너뜀
+                    if not any(included_word in file for included_word in filter_list["include"]):
+                        continue
 
                 source_file = os.path.join(root, file).replace("\\", "/")
                 destination_file = os.path.join(destination_dir, file).replace("\\", "/")
@@ -938,7 +991,7 @@ class LLM_Analyze_Prompt_Thread(QThread):
                 "\n\n".join(chunk) +
                 f"\n\n{using_prompt}.  Answer in {language}"
         )
-        
+
         try:
             response = self.client.chat.completions.create(
                 model=using_model,
