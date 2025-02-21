@@ -390,16 +390,8 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         if self.work_progress is not None:
             self.work_progress.close()
 
-        overall_report = f"""
-            <h1 style="color:red;">[Summary Result]</h1>
-            <p>{message['result_message']}</p>
-
-            <h1 style="color:blue;">[Detailed Analysis]</h1>
-            <p>{message['summarize_chunk_data']}</p>  
-
-            <p>-End-</p>
-        """
-        self.mainFrame_ui.llmresult_textEdit.setHtml(overall_report)
+        overall_report = f"# [Summary Result]\n\n{message['result_message']}\n\n\n# [Detailed Analysis]\n\n{message['summarize_chunk_data']}\n\n-End-"
+        self.mainFrame_ui.llmresult_textEdit.setMarkdown(overall_report)
 
         # append 쓰기
         # self.mainFrame_ui.llmresult_textEdit.appendPlainText(message)
