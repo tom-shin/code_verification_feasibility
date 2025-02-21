@@ -301,7 +301,10 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.tree_view.clearSelection()  # 기존 선택된 항목 해제
         self.tree_view.setCurrentIndex(QModelIndex())  # 현재 인덱스 초기화
 
-    def finished_load_thread(self, m_dir=None):    
+    def finished_load_thread(self, m_dir=None):
+        if self.work_progress is not None:
+            self.work_progress.close()
+
         # 선택된 항목 초기화
         self.deselect_file_dir()
 
@@ -338,9 +341,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         else:
             PRINT_("Error: Invalid directory index.", m_dir)
-        
-        if self.work_progress is not None:
-            self.work_progress.close()                
 
     def update_progressbar_label(self, file_name, value):
         if self.work_progress is not None:
@@ -360,7 +360,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.work_progress = ProgressDialog(modal=modal_display, message="Loading Selected Project Files", show=True,
                                             unknown_max_limit=True)
-        
+
         self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, BASE_DIR=BASE_DIR,
                                              keyword_filter=self.CONFIG_PARAMS["filter"])
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
@@ -385,6 +385,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             f.write(overall_report)
 
     def llm_analyze_result(self, message):
+        self.saveTestResult(message=message)
+
+        if self.work_progress is not None:
+            self.work_progress.close()
+
         overall_report = f"""
             <h1 style="color:red;">[Summary Result]</h1>
             <p>{message['result_message']}</p>
@@ -400,11 +405,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         # self.mainFrame_ui.llmresult_textEdit.appendPlainText(message)
 
         self.mainFrame_ui.tabWidget.setCurrentIndex(1)
-
-        if self.work_progress is not None:
-            self.work_progress.close()
-
-        self.saveTestResult(message=message)
 
     def chunking_result(self, chunk_data):
         self.mainFrame_ui.chunk_textEdit.setMarkdown(chunk_data)
@@ -434,7 +434,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                                            QtWidgets.QMessageBox.Yes)
                 return
 
-        
         # 폴더가 없으면 생성
         result_dir = os.path.join(BASE_DIR, "Result").replace("\\", "/")
         os.makedirs(result_dir, exist_ok=True)
@@ -466,7 +465,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             "llm_key": llm_key,
             "max_token_limit": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["max_limit_token"],
             "timeout": int(timeout),
-            "language": language            
+            "language": language
         }
 
         if self.mainFrame_ui.popctrl_radioButton.isChecked():
