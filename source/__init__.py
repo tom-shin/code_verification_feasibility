@@ -864,7 +864,7 @@ class LoadDir_Thread(QThread):
 
 
 class LLM_Analyze_Prompt_Thread(QThread):
-    finished_analyze_sig = pyqtSignal(str)
+    finished_analyze_sig = pyqtSignal(dict)
     chunk_analyzed_sig = pyqtSignal(str)
 
     def __init__(self, ctrl_params):
@@ -1083,7 +1083,13 @@ class LLM_Analyze_Prompt_Thread(QThread):
         # 2. chunking 데이터를 LLM에 넣어 분석 결과 도출 단계
         result_message = self.generate_final_analysis(chunk_summaries=chunk_summaries, using_model=using_model,
                                                       using_prompt=prompt, language=self.language, timeout=timeout)
-        return result_message
+
+        overall_report = {
+            "result_message": result_message,
+            "summarize_chunk_data": summarize_chunk_data
+        }
+
+        return overall_report
 
     def run(self) -> None:
         # 코드 작성

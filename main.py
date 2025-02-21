@@ -370,11 +370,9 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.work_progress.show_progress()
 
-    def saveTestResult(self):
-        result_summary = self.getSummaryResult()
-        result_chunk = self.getChunkResult()
-
-        overall_report = f"[Summary Result]\n\n{result_summary}\n\n\n[Detailed Analysis]\n\n{result_chunk}\n\n -End-"
+    @staticmethod
+    def saveTestResult(message):
+        overall_report = f"# [Summary Result]\n\n{message['result_message']}\n\n\n# [Detailed Analysis]\n\n{message['summarize_chunk_data']}\n\n-End-"
 
         # 현재 날짜 및 시간을 'YYYYMMDD_HHMMSS' 형식으로 생성
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -386,28 +384,27 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(overall_report)
 
-        # # PDF 생성
-        # file_name = f"result_{timestamp}.pdf"
-        # c = canvas.Canvas(file_path)
-        # c.setFont("Helvetica", 12)  # 폰트 설정
-        # overall_report = "이것은 PDF 저장 테스트입니다.\n새로운 줄도 가능합니다!"
-        # c.drawString(100, 750, overall_report)  # 텍스트 위치 조정
-        #
-        # # PDF 저장
-        # c.save()
-
     def llm_analyze_result(self, message):
-        # 덮어쓰기
-        self.mainFrame_ui.llmresult_textEdit.setMarkdown(message)
+        overall_report = f"""
+                <h1 style="color:red;">[Summary Result]</h1>
+                <p>{message['result_message']}</p>
+
+                <h1 style="color:blue;">[Detailed Analysis]</h1>
+                <p>{message['summarize_chunk_data'].replace("\n", "<br>")}</p>
+
+                <p>-End-</p>
+                """
+        self.mainFrame_ui.llmresult_textEdit.setHtml(overall_report)
 
         # append 쓰기
         # self.mainFrame_ui.llmresult_textEdit.appendPlainText(message)
 
-        self.saveTestResult()
         self.mainFrame_ui.tabWidget.setCurrentIndex(1)
 
         if self.work_progress is not None:
             self.work_progress.close()
+
+        self.saveTestResult(message=message)
 
     def chunking_result(self, chunk_data):
         self.mainFrame_ui.chunk_textEdit.setMarkdown(chunk_data)
