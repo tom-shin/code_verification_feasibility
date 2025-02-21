@@ -872,7 +872,10 @@ class LLM_Analyze_Prompt_Thread(QThread):
 
         self.running = True
         self.root_dir = ctrl_params["project_src_file"]
-        self.prompt = ctrl_params["prompt"]
+        self.prompt = {
+            "system_prompt": ctrl_params["system_prompt"],
+            "user_prompt": ctrl_params["user_prompt"]
+        }
         self.llm = ctrl_params["llm_model"]
         self.timeout = ctrl_params["timeout"]
         self.user_contents = ctrl_params["user_contents"]
@@ -944,15 +947,26 @@ class LLM_Analyze_Prompt_Thread(QThread):
 
     def summarize_text(self, chunk, using_model, using_prompt, language, timeout):
         """ Use OpenAI to summarize long text """
-        final_prompt = (
+        user_final_prompt = (
                 "\n\n".join(chunk) +
-                f"\n\n{using_prompt}.  Answer in {language}"
+                f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
         )
+
+        system_final_prompt = (                
+                f"{using_prompt['system_prompt']}."
+        )
+
+        # print("Chunk Final Prompt")
+        # print(system_final_prompt)
+        # print(user_final_prompt)
 
         try:
             response = self.client.chat.completions.create(
                 model=using_model,
-                messages=[{"role": "user", "content": final_prompt}],
+                messages=[
+                    {"role": "system", "content": system_final_prompt},
+                    {"role": "user", "content": user_final_prompt}
+                ],
                 timeout=timeout
             )
             return response.choices[0].message.content, True
@@ -978,23 +992,43 @@ class LLM_Analyze_Prompt_Thread(QThread):
         return chunk_summaries, True
 
     def generate_final_analysis(self, chunk_summaries=None, using_model="gpt-4o-mini",
-                                using_prompt="please analyze prompt", language="english", timeout=300.0):
+                                using_prompt=None, language="english", timeout=300.0):
 
         """ 전체 요약 결과를 바탕으로 최종 분석 요청 """
         if chunk_summaries is None:
-            final_prompt = (
-                f"{using_prompt}.  Answer in {language}"
+            user_final_prompt = (
+                f"{using_prompt['user_prompt']}.  Answer in {language}"
             )
         else:
-            final_prompt = (
+            user_final_prompt = (
                     "\n\n".join(chunk_summaries) +
-                    f"\n\n{using_prompt}.  Answer in {language}"
+                    f"\n\nWrite the final result incorporating any necessary additional feedback from the content above. Write in {language}"
             )
+        # if chunk_summaries is None:
+        #     user_final_prompt = (
+        #         f"{using_prompt['user_prompt']}.  Answer in {language}"
+        #     )
+        # else:
+        #     user_final_prompt = (
+        #             "\n\n".join(chunk_summaries) +
+        #             f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
+        #     )
+        
+        system_final_prompt = (                
+                f"{using_prompt['system_prompt']}."
+        )
+
+        # print("Final Prompt")
+        # print(system_final_prompt)
+        # print(user_final_prompt)
 
         try:
             response = self.client.chat.completions.create(
                 model=using_model,
-                messages=[{"role": "user", "content": final_prompt}],
+                messages=[
+                    {"role": "system", "content": system_final_prompt},
+                    {"role": "user", "content": user_final_prompt}
+                ],
                 timeout=timeout  # openai 라이브러리에서는 request_timeout 사용
             )
             return response.choices[0].message.content
@@ -1007,7 +1041,7 @@ class LLM_Analyze_Prompt_Thread(QThread):
             return f"[Error] Unexpected error: {str(e)}\n{traceback.format_exc()}"
 
     def analyze_project(self, folder_path, user_contents, max_length=3000, using_model="gpt-4o-mini",
-                        prompt="please analyze",
+                        prompt=None,                        
                         language="english",
                         timeout=300):
 

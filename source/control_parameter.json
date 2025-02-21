@@ -25,41 +25,42 @@
             "timeout": "300",
             "max_limit_token": 1000
         }
+    },       
+    
+    "filter":{
+        "include": [
+            ".py",
+            ".c",
+            ".cpp"
+            ],
+        "exclude": [
+            ".git",
+            ".idea",
+            "pycache",
+            ".zip",
+            ".pdf",
+            ".xlsx",
+            ".bin",
+            ".bat",
+            ".onnx",
+            "tflite",
+            "caffe",
+            "tool",
+            "designer",
+            "Gen-6"
+            ]
     },
-        
-    "keyword": {
-        "filter":{
-            "include": [
-                ".py",
-                ".c",
-                ".cpp"
-                ],
-            "exclude": [
-                ".git",
-                ".idea",
-                "pycache",
-                ".zip",
-                ".pdf",
-                ".xlsx",
-                ".bin",
-                ".bat",
-                ".onnx",
-                "tflite",
-                "caffe",
-                "tool",
-                "designer",
-                "Gen-6"
-                ]
-        },
-        
-        "x_default_prompt": [
-            "당신은 C언어 코드 전문가야. 최소 경력이 20년 이상된. 내가 전달한 코드는 C 코드인데 코드 검사 해 주고 버그 찾아 주고 수정 해 줘\n"
+    
+    "prompt":{
+        "system": [
+            "You are a top-level expert with at least 30 years of experience in programming languages."
         ],
-        "example_content": [
-            "[error_example.c]\n\nint main() {\nint a = 10;\nfloat b = 20;\nfloat *p = None\np = &a\nc = *p\nprint(a+c)\n"
-        ],
-        "default_prompt": [
-            "You are an expert in code evaluation.\nThe above is a summary of each part of the project, including file names and paths. Based on this, analyze the overall structure, relationships between files, code quality, and identify any issues or bugs in the code. Also, suggest improvements and provide example code improvements. and assess its quality using measurable metrics such as reliability, F1 score, or other relevant code quality indicators. Provide a numerical score along with a detailed explanation of the reasoning behind your assessment, including the logic used to determine the score.\n\nPlease provide the analysis and improvement suggestions in Korean\n"
+        "user": [
+            "The above is a summary of each part of the project, including file names and paths. Based on this, analyze the overall structure, relationships between files, code quality, and identify any issues or bugs in the code. Also, suggest improvements and provide example code improvements. and assess its quality using measurable metrics such as reliability, F1 score, or other relevant code quality indicators. Provide a numerical score along with a detailed explanation of the reasoning behind your assessment, including the logic used to determine the score.\n\nPlease provide the analysis and improvement suggestions.\n"
         ]
-    }
+    },
+    "example_content": [
+        "[error_example.c]\n\nint main() {\nint a = 10;\nfloat b = 20;\nfloat *p = None\np = &a\nc = *p\nprint(a+c)\n"
+    ]
+
 }

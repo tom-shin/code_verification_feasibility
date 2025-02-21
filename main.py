@@ -145,10 +145,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         return language
 
     def getLLMPrompt(self):
-        text = self.mainFrame_ui.prompt_window.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
+        user_text = self.mainFrame_ui.prompt_window.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
         # combined_text = "".join(text)
+        system_text = "".join(self.CONFIG_PARAMS["prompt"]["system"])
 
-        return text
+        return system_text, user_text
 
     def getUserContents(self):
         text = self.mainFrame_ui.user_textEdit.toPlainText()
@@ -167,13 +168,13 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         return text
 
     def save_prompt(self):
-        self.CONFIG_PARAMS["keyword"]["default_prompt"] = [self.getLLMPrompt()]
+        self.CONFIG_PARAMS["prompt"]["user"] = [self.getLLMPrompt()]
         # control_parameter_path = os.path.join(BASE_DIR, "source", "control_parameter.json")
         control_parameter_path = os.path.join(BASE_DIR, "control_parameter.json")
         json_dump_f(file_path=control_parameter_path, data=self.CONFIG_PARAMS, use_encoding=False)
 
     def get_prompt(self):
-        text = self.CONFIG_PARAMS["keyword"]["default_prompt"]
+        text = self.CONFIG_PARAMS["prompt"]["user"]
         self.mainFrame_ui.prompt_window.setText("".join(text))
 
     def connectSlotSignal(self):
@@ -211,11 +212,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             row += 1  # 행 번호 증가
 
     def setDefaultPrompt(self):
-        prompt = "".join(self.CONFIG_PARAMS["keyword"]["default_prompt"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
+        prompt = "".join(self.CONFIG_PARAMS["prompt"]["user"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
         self.mainFrame_ui.prompt_window.setText(prompt)
 
     def setDefaultUserContent(self):
-        text = self.CONFIG_PARAMS["keyword"]["example_content"]
+        text = self.CONFIG_PARAMS["example_content"]
         self.mainFrame_ui.user_textEdit.setPlainText("".join(text))
 
     def getSelectedModel(self):
@@ -351,7 +352,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                             unknown_max_limit=True)
         
         self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, BASE_DIR=BASE_DIR,
-                                             keyword_filter=self.CONFIG_PARAMS["keyword"]["filter"])
+                                             keyword_filter=self.CONFIG_PARAMS["filter"])
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
         self.t_load_project.copy_status_sig.connect(self.update_progressbar_label)
 
@@ -432,7 +433,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         os.makedirs(result_dir, exist_ok=True)
 
         llm_model = self.getSelectedModel()
-        prompt = self.getLLMPrompt()
+        system_prompt, user_prompt = self.getLLMPrompt()
         language = self.getLanguage()
 
         llm_key = os.getenv("OPENAI_API_KEY")
@@ -443,14 +444,17 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         print("[Info] LLM Model")
         print(f"-->{llm_model}")
-        print("[Info] Using Prompt")
-        print(f"-->{prompt}")
+        print("[Info] Using System Prompt")
+        print(f"-->{system_prompt}")
+        print("[Info] Using User Prompt")
+        print(f"-->{user_prompt}")
         print("[Info] Time Out")
         print(f"-->{timeout} s")
         ctrl_params = {
             "project_src_file": file_path,
             "user_contents": user_contents,
-            "prompt": prompt,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
             "llm_model": llm_model,
             "llm_key": llm_key,
             "max_token_limit": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["max_limit_token"],
