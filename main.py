@@ -147,7 +147,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
     def getLLMPrompt(self):
         user_text = self.mainFrame_ui.prompt_window.toPlainText()  # QTextBrowser에서 전체 텍스트 가져오기
         # combined_text = "".join(text)
-        system_text = "".join(self.CONFIG_PARAMS["prompt"]["system"])
+        system_text = self.mainFrame_ui.systemlineEdit.text()  # QTextBrowser에서 전체 텍스트 가져오기
 
         return system_text, user_text
 
@@ -168,14 +168,20 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         return text
 
     def save_prompt(self):
-        self.CONFIG_PARAMS["prompt"]["user"] = [self.getLLMPrompt()]
+        system_prompt, user_prompt = self.getLLMPrompt()
+
+        self.CONFIG_PARAMS["prompt"]["user"] = [user_prompt]
+        self.CONFIG_PARAMS["prompt"]["system"] = [system_prompt]
         # control_parameter_path = os.path.join(BASE_DIR, "source", "control_parameter.json")
         control_parameter_path = os.path.join(BASE_DIR, "control_parameter.json")
         json_dump_f(file_path=control_parameter_path, data=self.CONFIG_PARAMS, use_encoding=False)
 
     def get_prompt(self):
-        text = self.CONFIG_PARAMS["prompt"]["user"]
-        self.mainFrame_ui.prompt_window.setText("".join(text))
+        user_text = self.CONFIG_PARAMS["prompt"]["user"]
+        self.mainFrame_ui.prompt_window.setText("".join(user_text))
+
+        system_text = self.CONFIG_PARAMS["prompt"]["system"]
+        self.mainFrame_ui.systemlineEdit.setText("".join(system_text))
 
     def connectSlotSignal(self):
         """ sys.stdout redirection """
@@ -212,8 +218,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             row += 1  # 행 번호 증가
 
     def setDefaultPrompt(self):
-        prompt = "".join(self.CONFIG_PARAMS["prompt"]["user"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
-        self.mainFrame_ui.prompt_window.setText(prompt)
+        user_prompt = "".join(self.CONFIG_PARAMS["prompt"]["user"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
+        self.mainFrame_ui.prompt_window.setText(user_prompt)
+
+        system_prompt = "".join(self.CONFIG_PARAMS["prompt"]["system"])  # 리스트 요소를 줄바꿈(\n)으로 합치기
+        self.mainFrame_ui.systemlineEdit.setText(system_prompt)
 
     def setDefaultUserContent(self):
         text = self.CONFIG_PARAMS["example_content"]
