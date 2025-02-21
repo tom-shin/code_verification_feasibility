@@ -386,14 +386,14 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     def llm_analyze_result(self, message):
         overall_report = f"""
-                <h1 style="color:red;">[Summary Result]</h1>
-                <p>{message['result_message']}</p>
+            <h1 style="color:red;">[Summary Result]</h1>
+            <p>{message['result_message']}</p>
 
-                <h1 style="color:blue;">[Detailed Analysis]</h1>
-                <p>{message['summarize_chunk_data'].replace("\n", "<br>")}</p>
+            <h1 style="color:blue;">[Detailed Analysis]</h1>
+            <p>{message['summarize_chunk_data']}</p>  
 
-                <p>-End-</p>
-                """
+            <p>-End-</p>
+        """
         self.mainFrame_ui.llmresult_textEdit.setHtml(overall_report)
 
         # append 쓰기
