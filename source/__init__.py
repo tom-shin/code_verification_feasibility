@@ -947,12 +947,13 @@ class LLM_Analyze_Prompt_Thread(QThread):
 
     def summarize_text(self, chunk, using_model, using_prompt, language, timeout):
         """ Use OpenAI to summarize long text """
-        user_final_prompt = (
-                "\n\n".join(chunk) +
-                f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
-        )
+        # user_final_prompt = (
+        #         "\n\n".join(chunk) +
+        #         f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
+        # )
+        user_final_prompt = chunk + f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
 
-        system_final_prompt = (                
+        system_final_prompt = (
                 f"{using_prompt['system_prompt']}."
         )
 
