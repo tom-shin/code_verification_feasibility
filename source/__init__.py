@@ -651,6 +651,17 @@ def stop_all_threads():
             thread.join(timeout=1)  # 1초 기다린 후 종료
 
 
+def cleanup_root_temp_folders(BASE_DIR):
+    """temp_dir 내에서 root_temp_로 시작하는 모든 폴더를 삭제합니다."""
+    for root, dirs, files in os.walk(BASE_DIR, topdown=False):
+        for dir_name in dirs:
+            # 'root_temp_'로 시작하는 폴더를 찾기
+            if dir_name.startswith("root_temp_"):
+                dir_path = os.path.join(root, dir_name)
+                PRINT_(f"Deleting folder: {dir_path}")  # 삭제하려는 폴더 경로 출력
+                shutil.rmtree(dir_path)  # 해당 폴더 및 그 하위 항목 삭제
+
+
 class ColonLineHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -703,18 +714,7 @@ class LoadDir_Thread(QThread):
         self.target_dir = os.path.join(BASE_DIR, f"root_temp_{unique_id}", os.path.basename(self.src_dir)).replace("\\",
                                                                                                                    "/")
 
-        self.cleanup_root_temp_folders(BASE_DIR=BASE_DIR)
-
-    @staticmethod
-    def cleanup_root_temp_folders(BASE_DIR):
-        """temp_dir 내에서 root_temp_로 시작하는 모든 폴더를 삭제합니다."""
-        for root, dirs, files in os.walk(BASE_DIR, topdown=False):
-            for dir_name in dirs:
-                # 'root_temp_'로 시작하는 폴더를 찾기
-                if dir_name.startswith("root_temp_"):
-                    dir_path = os.path.join(root, dir_name)
-                    PRINT_(f"Deleting folder: {dir_path}")  # 삭제하려는 폴더 경로 출력
-                    shutil.rmtree(dir_path)  # 해당 폴더 및 그 하위 항목 삭제
+        cleanup_root_temp_folders(BASE_DIR=BASE_DIR)
 
     def run(self) -> None:
         # 코드 작성
@@ -954,7 +954,7 @@ class LLM_Analyze_Prompt_Thread(QThread):
         user_final_prompt = chunk + f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
 
         system_final_prompt = (
-                f"{using_prompt['system_prompt']}."
+            f"{using_prompt['system_prompt']}."
         )
 
         # print("Chunk Final Prompt")
@@ -1014,9 +1014,9 @@ class LLM_Analyze_Prompt_Thread(QThread):
         #             "\n\n".join(chunk_summaries) +
         #             f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
         #     )
-        
-        system_final_prompt = (                
-                f"{using_prompt['system_prompt']}."
+
+        system_final_prompt = (
+            f"{using_prompt['system_prompt']}."
         )
 
         # print("Final Prompt")
@@ -1042,7 +1042,7 @@ class LLM_Analyze_Prompt_Thread(QThread):
             return f"[Error] Unexpected error: {str(e)}\n{traceback.format_exc()}"
 
     def analyze_project(self, folder_path, user_contents, max_length=3000, using_model="gpt-4o-mini",
-                        prompt=None,                        
+                        prompt=None,
                         language="english",
                         timeout=300):
 

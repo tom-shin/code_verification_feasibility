@@ -63,6 +63,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
         self.setupGPTModels()
         self.setDefaultPrompt()
         self.setDefaultUserContent()
+        cleanup_root_temp_folders(BASE_DIR=BASE_DIR)
 
         # 탐색기 뷰 추가
         if self.tree_view is None:
