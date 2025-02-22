@@ -23,7 +23,7 @@ import requests
 from collections import OrderedDict
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, Future
-from reportlab.pdfgen import canvas
+# from reportlab.pdfgen import canvas
 
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QThread, QObject, QModelIndex
