@@ -10,23 +10,7 @@ else:
     RESOURCE_DIR = BASE_DIR  # 개발 환경에서는 현재 폴더 사용
 
 
-def load_module_func(module_name):
-    mod = __import__(f"{module_name}", fromlist=[module_name])
-    return mod
-
-
-class EmittingStream(QObject):
-    textWritten = pyqtSignal(str)
-
-    def write(self, text):
-        self.textWritten.emit(str(text))
-
-    def flush(self):
-        pass
-
-
-class Project_MainWindow(QtWidgets.QMainWindow):
-
+class ProjectMainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
@@ -154,6 +138,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     def getUserContents(self):
         text = self.mainFrame_ui.user_textEdit.toPlainText()
+
         return text
 
     def getSummaryResult(self):
@@ -264,8 +249,8 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                 line = file.readlines()  # 모든 줄을 리스트로 반환
 
         except Exception as e:
-            print(f"파일을 여는 중 오류 발생: {e}")
-            print(traceback.format_exc())  # 전체 오류 트레이스백 출력
+            PRINT_(f"파일을 여는 중 오류 발생: {e}")
+            PRINT_(traceback.format_exc())  # 전체 오류 트레이스백 출력
             sys.exit(1)  # 프로그램 종료 (1은 오류 코드, 0은 정상 종료)
 
         model_config_str = "".join(line)
@@ -347,6 +332,30 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             self.work_progress.onProgressTextChanged(text=file_name)
             self.work_progress.onCountChanged(value=value % self.work_progress.getProgressBarMaximumValue())
 
+    def close_progress_dialog(self):
+        #  QDialog 인 경우
+        if self.work_progress is not None:
+            PRINT_(self.work_progress, "close work_progress dialog")
+            self.work_progress.deleteLater()
+            self.work_progress = None
+
+        #  QThread 인 경우
+        if self.t_load_project is not None:
+            PRINT_(self.t_load_project, "close t_load_project thread")
+            if self.t_load_project.isRunning():
+                self.t_load_project.stop()
+
+            self.t_load_project.deleteLater()
+            self.t_load_project = None
+
+        if self.llm_analyze_instance is not None:
+            PRINT_(self.llm_analyze_instance, "close llm_analyze_instance thread")
+            if self.llm_analyze_instance.isRunning():
+                self.llm_analyze_instance.stop()
+
+            self.llm_analyze_instance.deleteLater()
+            self.llm_analyze_instance = None
+
     def open_directory(self):
         m_dir = QFileDialog.getExistingDirectory(self, "Select Directory")
 
@@ -360,9 +369,10 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         self.work_progress = ProgressDialog(modal=modal_display, message="Loading Selected Project Files", show=True,
                                             unknown_max_limit=True)
+        self.work_progress.progress_stop_sig.connect(self.close_progress_dialog)
 
-        self.t_load_project = LoadDir_Thread(m_source_dir=m_dir, BASE_DIR=BASE_DIR,
-                                             keyword_filter=self.CONFIG_PARAMS["filter"])
+        self.t_load_project = LoadDirectoryThread(m_source_dir=m_dir, BASE_DIR=BASE_DIR,
+                                                  keyword_filter=self.CONFIG_PARAMS["filter"])
         self.t_load_project.finished_load_project_sig.connect(self.finished_load_thread)
         self.t_load_project.copy_status_sig.connect(self.update_progressbar_label)
 
@@ -372,8 +382,6 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
     @staticmethod
     def saveTestResult(message):
-        overall_report = f"# [Summary Result]\n\n{message['result_message']}\n\n\n# [Detailed Analysis]\n\n{message['summarize_chunk_data']}\n\n-End-"
-
         # 현재 날짜 및 시간을 'YYYYMMDD_HHMMSS' 형식으로 생성
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"result_{timestamp}.md"
@@ -382,24 +390,24 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         # 파일 저장
         with open(file_path, "w", encoding="utf-8") as f:
-            f.write(overall_report)
+            f.write(message)
 
-    def llm_analyze_result(self, message):
-        self.saveTestResult(message=message)
+    def llm_analyze_result(self, summary_message):
+        self.mainFrame_ui.tabWidget.setCurrentIndex(1)
+
+        summary = f"# [Summary Result]\n\n{summary_message}\n\n\n"
+        self.mainFrame_ui.llmresult_textEdit.setMarkdown(summary)
+
+        detailed_summary = "# " + self.getChunkResult()
+        overall_report = f"{summary}\n\n\n{detailed_summary}\n\n-End-"
+        self.saveTestResult(message=overall_report)
 
         if self.work_progress is not None:
             self.work_progress.close()
 
-        overall_report = f"# [Summary Result]\n\n{message['result_message']}\n\n\n# [Detailed Analysis]\n\n{message['summarize_chunk_data']}\n\n-End-"
-        self.mainFrame_ui.llmresult_textEdit.setMarkdown(overall_report)
-
-        # append 쓰기
-        # self.mainFrame_ui.llmresult_textEdit.appendPlainText(message)
-
-        self.mainFrame_ui.tabWidget.setCurrentIndex(1)
-
     def chunking_result(self, chunk_data):
-        self.mainFrame_ui.chunk_textEdit.setMarkdown(chunk_data)
+        summary = f"# [Detailed Results]\n\n{chunk_data}\n\n\n"
+        self.mainFrame_ui.chunk_textEdit.setMarkdown(summary)
 
     def start_analyze(self):
         selected_indexes = self.tree_view.selectedIndexes()
@@ -413,7 +421,7 @@ class Project_MainWindow(QtWidgets.QMainWindow):
             answer = QtWidgets.QMessageBox.question(self,
                                                     "Information ...",
                                                     "분석할 코드 폴더를 선택하지 않았습니다.\n Input Contents(code, text ...) 내용으로 진행 할 까요?",
-                                                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+                                                    QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Yes)
 
             if answer == QtWidgets.QMessageBox.No:
                 return
@@ -427,6 +435,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                 return
 
         # 폴더가 없으면 생성
+        self.mainFrame_ui.llmresult_textEdit.clear()
+        self.mainFrame_ui.chunk_textEdit.clear()
+        self.mainFrame_ui.embed_textEdit.clear()
+        self.mainFrame_ui.tabWidget.setCurrentIndex(1)
+
         result_dir = os.path.join(BASE_DIR, "Result").replace("\\", "/")
         os.makedirs(result_dir, exist_ok=True)
 
@@ -440,14 +453,14 @@ class Project_MainWindow(QtWidgets.QMainWindow):
 
         timeout = int(self.mainFrame_ui.timeoutlineEdit.text())
 
-        print("[Info] LLM Model")
-        print(f"-->{llm_model}")
-        print("[Info] Using System Prompt")
-        print(f"-->{system_prompt}")
-        print("[Info] Using User Prompt")
-        print(f"-->{user_prompt}")
-        print("[Info] Time Out")
-        print(f"-->{timeout} s")
+        PRINT_("[Info] LLM Model")
+        PRINT_(f"-->{llm_model}")
+        PRINT_("[Info] Using System Prompt")
+        PRINT_(f"-->{system_prompt}")
+        PRINT_("[Info] Using User Prompt")
+        PRINT_(f"-->{user_prompt}")
+        PRINT_("[Info] Time Out")
+        PRINT_(f"-->{timeout} s")
         ctrl_params = {
             "project_src_file": file_path,
             "user_contents": user_contents,
@@ -469,10 +482,11 @@ class Project_MainWindow(QtWidgets.QMainWindow):
                                             message="Analyzing Selected Project Files",
                                             show=True,
                                             unknown_max_limit=True,
-                                            self_onCountChanged_params=True
+                                            on_count_changed_params_itself=True
                                             )
+        self.work_progress.progress_stop_sig.connect(self.close_progress_dialog)
 
-        self.llm_analyze_instance = LLM_Analyze_Prompt_Thread(ctrl_params=ctrl_params)
+        self.llm_analyze_instance = RequestLLMThread(ctrl_params=ctrl_params)
         self.llm_analyze_instance.finished_analyze_sig.connect(self.llm_analyze_result)
         self.llm_analyze_instance.chunk_analyzed_sig.connect(self.chunking_result)
         self.llm_analyze_instance.start()
@@ -486,7 +500,7 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)  # QApplication 생성 (필수)
 
     app.setStyle("Fusion")
-    ui = Project_MainWindow()
+    ui = ProjectMainWindow()
     ui.showMaximized()
     ui.connectSlotSignal()
 

@@ -19,6 +19,7 @@ import threading
 import openai
 from openai._exceptions import OpenAIError, AuthenticationError
 import httpx
+import requests
 from collections import OrderedDict
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, Future
@@ -48,119 +49,9 @@ def PRINT_(*args):
 ANSI_ESCAPE = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
 
-class ProgressDialog(QDialog):  # This class will handle both modal and non-modal dialogs    
-
-    def __init__(self, message, modal=True, show=False, parent=None, unknown_max_limit=False,
-                 self_onCountChanged_params=False):
-        super().__init__(parent)
-
-        self.setWindowTitle(message)
-
-        self.unknown_max_limit = unknown_max_limit
-
-        # Set the dialog as modal or non-modal based on the 'modal' argument
-        if modal:
-            self.setModal(True)
-        else:
-            self.setWindowModality(QtCore.Qt.NonModal)
-
-        self.resize(700, 100)  # Resize to desired dimensions
-
-        self.max_cnt = 100
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setMaximum(int(self.max_cnt))
-
-        self.label = QLabel("", self)
-        self.close_button = QPushButton("Close", self)
-
-        # Create a horizontal layout for the close button and spacer
-        h_layout = QHBoxLayout()
-        spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
-        h_layout.addSpacerItem(spacer)
-        h_layout.addWidget(self.close_button)
-
-        # Create the main layout
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.progress_bar)
-        layout.addWidget(self.label)
-
-        self.radio_button = QRadioButton("", self)
-        layout.addWidget(self.radio_button)
-
-        layout.addLayout(h_layout)
-        self.setLayout(layout)
-
-        # Close button click event
-        self.close_button.clicked.connect(self.close)
-
-        # Show or hide the close button based on 'show'
-        if show:
-            self.close_button.show()
-        else:
-            self.close_button.hide()
-
-        # Timer to toggle radio button every 500ms
-        self.timer = QTimer(self)
-
-        self.radio_state = False  # Initial blink state
-
-        if self.unknown_max_limit:
-            # Remove the progress bar format (e.g., "%" sign)
-            self.progress_bar.setFormat("")  # No percentage displayed
-
-        self.timer.timeout.connect(self.toggle_radio_button)
-        self.timer.start(100)  # 500ms interval
-
-        self.cnt = 0
-        self.self_onCountChanged_params = self_onCountChanged_params
-
-    def getProgressBarMaximumValue(self):
-        return self.max_cnt
-
-    def setProgressBarMaximum(self, max_value):
-        self.max_cnt = max_value
-        self.progress_bar.setMaximum(int(max_value))
-
-    def onCountChanged(self, value):
-        self.progress_bar.setValue(int(value))
-
-    def onProgressTextChanged(self, text):
-        self.label.setText(text)
-
-    def show_progress(self):
-        if self.isModal():
-            super().exec_()  # Execute as modal
-        else:
-            self.show()  # Show as non-modal
-
-    def closeEvent(self, event):
-        self.timer.stop()
-        event.accept()
-
-    def toggle_radio_button(self):
-        if self.self_onCountChanged_params:
-            self.cnt += 1
-            self.onCountChanged(self.cnt % self.max_cnt)
-
-        if self.radio_state:
-            self.radio_button.setStyleSheet("""
-                        QRadioButton::indicator {
-                            width: 12px;
-                            height: 12px;
-                            background-color: red;
-                            border-radius: 5px;
-                        }
-                    """)
-        else:
-            self.radio_button.setStyleSheet("""
-                        QRadioButton::indicator {
-                            width: 12px;
-                            height: 12px;
-                            background-color: blue;
-                            border-radius: 5px;
-                        }
-                    """)
-        self.radio_state = not self.radio_state
+def load_module_func(module_name):
+    mod = __import__(f"{module_name}", fromlist=[module_name])
+    return mod
 
 
 def json_dump_f(file_path, data, use_encoding=False):
@@ -662,6 +553,134 @@ def cleanup_root_temp_folders(BASE_DIR):
                 shutil.rmtree(dir_path)  # 해당 폴더 및 그 하위 항목 삭제
 
 
+class EmittingStream(QObject):
+    textWritten = pyqtSignal(str)
+
+    def write(self, text):
+        self.textWritten.emit(str(text))
+
+    def flush(self):
+        pass
+
+
+class ProgressDialog(QDialog):  # This class will handle both modal and non-modal dialogs
+    progress_stop_sig = pyqtSignal()
+
+    def __init__(self, message, modal=True, show=False, parent=None, unknown_max_limit=False,
+                 on_count_changed_params_itself=False):
+
+        super().__init__(parent)
+
+        self.setWindowTitle(message)
+
+        self.unknown_max_limit = unknown_max_limit
+
+        # Set the dialog as modal or non-modal based on the 'modal' argument
+        if modal:
+            self.setModal(True)
+        else:
+            self.setWindowModality(QtCore.Qt.NonModal)
+
+        self.resize(700, 100)  # Resize to desired dimensions
+
+        self.max_cnt = 100
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setMaximum(int(self.max_cnt))
+
+        self.label = QLabel("", self)
+        self.close_button = QPushButton("Close", self)
+
+        # Create a horizontal layout for the close button and spacer
+        h_layout = QHBoxLayout()
+        spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        h_layout.addSpacerItem(spacer)
+        h_layout.addWidget(self.close_button)
+
+        # Create the main layout
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.progress_bar)
+        layout.addWidget(self.label)
+
+        self.radio_button = QRadioButton("", self)
+        layout.addWidget(self.radio_button)
+
+        layout.addLayout(h_layout)
+        self.setLayout(layout)
+
+        # Close button click event
+        self.close_button.clicked.connect(self.close)
+
+        # Show or hide the close button based on 'show'
+        if show:
+            self.close_button.show()
+        else:
+            self.close_button.hide()
+
+        # Timer to toggle radio button every 500ms
+        self.timer = QTimer(self)
+
+        self.radio_state = False  # Initial blink state
+
+        if self.unknown_max_limit:
+            # Remove the progress bar format (e.g., "%" sign)
+            self.progress_bar.setFormat("")  # No percentage displayed
+
+        self.timer.timeout.connect(self.toggle_radio_button)
+        self.timer.start(100)  # 500ms interval
+
+        self.cnt = 0
+        self.on_count_changed_params_itself = on_count_changed_params_itself
+
+    def getProgressBarMaximumValue(self):
+        return self.max_cnt
+
+    def setProgressBarMaximum(self, max_value):
+        self.max_cnt = max_value
+        self.progress_bar.setMaximum(int(max_value))
+
+    def onCountChanged(self, value):
+        self.progress_bar.setValue(int(value))
+
+    def onProgressTextChanged(self, text):
+        self.label.setText(text)
+
+    def show_progress(self):
+        if self.isModal():
+            super().exec_()  # Execute as modal
+        else:
+            self.show()  # Show as non-modal
+
+    def toggle_radio_button(self):
+        if self.on_count_changed_params_itself:
+            self.cnt += 1
+            self.onCountChanged(self.cnt % self.max_cnt)
+
+        if self.radio_state:
+            self.radio_button.setStyleSheet("""
+                        QRadioButton::indicator {
+                            width: 12px;
+                            height: 12px;
+                            background-color: red;
+                            border-radius: 5px;
+                        }
+                    """)
+        else:
+            self.radio_button.setStyleSheet("""
+                        QRadioButton::indicator {
+                            width: 12px;
+                            height: 12px;
+                            background-color: blue;
+                            border-radius: 5px;
+                        }
+                    """)
+        self.radio_state = not self.radio_state
+
+    def closeEvent(self, event):
+        self.timer.stop()
+        event.accept()
+        self.progress_stop_sig.emit()
+
+
 class ColonLineHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -699,7 +718,7 @@ class ColonLineHighlighter(QSyntaxHighlighter):
             self.setFormat(0, len(text), self.colon_format)
 
 
-class LoadDir_Thread(QThread):
+class LoadDirectoryThread(QThread):
     finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
     copy_status_sig = pyqtSignal(str, int)  # ret, failed_pairs, memory_profile 전달
 
@@ -719,7 +738,6 @@ class LoadDir_Thread(QThread):
     def run(self) -> None:
         # 코드 작성
         self.copy_directory_structure_2()
-
         self.finished_load_project_sig.emit(os.path.dirname(self.target_dir))
 
     def copy_directory_structure_1(self):
@@ -746,8 +764,7 @@ class LoadDir_Thread(QThread):
 
         for root, dirs, files in os.walk(self.src_dir):
             if not self.running:
-                PRINT_("force termination_main loop")
-                break
+                return "stop_copy_directory_structure_2"
 
             # `exclude` 모드인 경우 폴더 필터링
             if exclude:
@@ -775,9 +792,9 @@ class LoadDir_Thread(QThread):
 
             # 파일 복사
             for file in valid_files if include_mode_active else files:
+
                 if not self.running:
-                    PRINT_("force termination_sub_loop")
-                    break
+                    return "stop_copy_directory_structure_2_2"
 
                 if exclude and any(excluded_word in file for excluded_word in filter_list["exclude"]):
                     continue
@@ -789,82 +806,14 @@ class LoadDir_Thread(QThread):
                 cnt += 1
                 self.copy_status_sig.emit(f"[{cnt}]   ../{os.path.basename(source_file)} copied", cnt)
 
-    def X_copy_directory_structure_2(self, exclude=False):
-        """
-        src_dir의 파일과 폴더를 대상 폴더로 복사하는 함수.
-        
-        exclude=True이면 제외 리스트에 있는 항목들을 제외한 나머지를 복사
-        exclude=False이면 포함 리스트에 있는 항목들만 복사        """
-
-        CheckDir(dir_=self.target_dir)
-
-        cnt = 0
-        filter_list = self.filter  # 필터링할 단어 리스트
-
-        # src_dir의 모든 파일과 폴더를 재귀적으로 탐색
-        for root, dirs, files in os.walk(self.src_dir):
-            if not self.running:
-                PRINT_("force termination_main loop")
-                break
-
-            # 디렉터리 필터링
-            if exclude:
-                # 제외 리스트에 있는 단어가 포함된 폴더는 건너뜀
-                if any(excluded_word in os.path.basename(root) for excluded_word in filter_list["exclude"]):
-                    continue
-                    # dirs에서 제외할 폴더를 제거
-                dirs[:] = [d for d in dirs if not any(excluded_word in d for excluded_word in filter_list["exclude"])]
-            else:
-                # 포함 리스트에 있는 단어가 포함되지 않은 폴더는 건너뜀
-                if not any(included_word in os.path.basename(root) for included_word in filter_list["include"]):
-                    continue
-                    # dirs에서 포함할 폴더만 유지
-                dirs[:] = [d for d in dirs if any(included_word in d for included_word in filter_list["include"])]
-
-            # 현재 폴더의 상대 경로를 대상 폴더 기준으로 계산
-            relative_path = os.path.relpath(root, self.src_dir).replace("\\", "/")
-            destination_dir = os.path.join(self.target_dir, relative_path).replace("\\", "/")
-
-            if not os.path.exists(destination_dir):
-                os.makedirs(destination_dir)
-
-            # 파일 필터링 및 복사
-            for file in files:
-                if not self.running:
-                    PRINT_("force termination_sub_loop")
-                    break
-
-                if exclude:
-                    # 제외 리스트에 있는 단어가 포함된 파일은 건너뜀
-                    if any(excluded_word in file for excluded_word in filter_list["exclude"]):
-                        continue
-                else:
-                    # 포함 리스트에 있는 단어가 포함되지 않은 파일은 건너뜀
-                    if not any(included_word in file for included_word in filter_list["include"]):
-                        continue
-
-                source_file = os.path.join(root, file).replace("\\", "/")
-                destination_file = os.path.join(destination_dir, file).replace("\\", "/")
-                shutil.copy2(source_file, destination_file)  # 메타데이터 포함하여 복사
-
-                cnt += 1
-                self.copy_status_sig.emit(f"[{cnt}]   ../{os.path.basename(source_file)} copied", cnt)
-
-                PRINT_(cnt)
-
     def stop(self):
         self.running = False
         self.quit()
-        self.wait(3000)
+        self.wait()
 
 
-"""
-이미 요청이 진행 중인 상황에서 서버의 동작을 멈추고 싶은데....
-"""
-
-
-class LLM_Analyze_Prompt_Thread(QThread):
-    finished_analyze_sig = pyqtSignal(dict)
+class RequestLLMThread(QThread):
+    finished_analyze_sig = pyqtSignal(str)
     chunk_analyzed_sig = pyqtSignal(str)
 
     def __init__(self, ctrl_params):
@@ -887,6 +836,8 @@ class LLM_Analyze_Prompt_Thread(QThread):
 
         self.combined_content = ""
         self.file_metadata = []  # 파일 경로와 파일명을 저장할 리스트
+
+        self.session = requests.Session()  # Create a session for HTTP requests
 
     @staticmethod
     def get_file_list(folder_path):
@@ -945,22 +896,35 @@ class LLM_Analyze_Prompt_Thread(QThread):
 
         return chunks
 
-    def summarize_text(self, chunk, using_model, using_prompt, language, timeout):
-        """ Use OpenAI to summarize long text """
-        # user_final_prompt = (
-        #         "\n\n".join(chunk) +
-        #         f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
-        # )
-        user_final_prompt = chunk + f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
+    def openai_request(self, using_model, system_final_prompt, user_final_prompt, timeout):
+        PRINT_("<<<   New Open Protocol     >>>>", self.running)
+        """Make HTTP request and handle the response"""
+        try:
+            # Example API URL (replace with your actual API URL)
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",  # Set your OpenAI API key
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": f"{using_model}",
+                "messages": [
+                    {"role": "system", "content": system_final_prompt},
+                    {"role": "user", "content": user_final_prompt}
+                ],
+            }
 
-        system_final_prompt = (
-            f"{using_prompt['system_prompt']}."
-        )
+            response = self.session.post(url, json=payload, headers=headers, timeout=timeout)
 
-        # print("Chunk Final Prompt")
-        # print(system_final_prompt)
-        # print(user_final_prompt)
+            if response.status_code == 200:
+                chat_response = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                return chat_response, True
+            else:
+                return f"Error: {response.status_code} - {response.text}", False
+        except requests.exceptions.RequestException as e:
+            return f"\nRequest error: {e}", False
 
+    def org_openai_request(self, using_model, system_final_prompt, user_final_prompt, timeout):
         try:
             response = self.client.chat.completions.create(
                 model=using_model,
@@ -968,15 +932,32 @@ class LLM_Analyze_Prompt_Thread(QThread):
                     {"role": "system", "content": system_final_prompt},
                     {"role": "user", "content": user_final_prompt}
                 ],
-                timeout=timeout
+                timeout=timeout  # openai 라이브러리에서는 request_timeout 사용
             )
             return response.choices[0].message.content, True
+
         except openai.OpenAIError as e:  # OpenAI 관련 오류
-            return f"[Timed Out] summarize_text - OpenAI API Error: {str(e)} --> {timeout} s", False
+            return f"[Timed Out] OpenAI API Error: {str(e)} --> {timeout} s", False
 
         except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
             import traceback
-            return f"[Error] summarize_text - Unexpected error: {str(e)}\n{traceback.format_exc()}", False
+            return f"[Error] Unexpected error: {str(e)}\n{traceback.format_exc()}", False
+
+    def summarize_text(self, chunk, using_model, using_prompt, language, timeout):
+        if not self.running:
+            return "강제 종료 되었음.", False
+
+        """ Use OpenAI to summarize long text """
+        user_final_prompt = chunk + f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
+
+        system_final_prompt = (
+            f"{using_prompt['system_prompt']}."
+        )
+
+        response, success = self.openai_request(using_model=using_model, system_final_prompt=system_final_prompt,
+                                                user_final_prompt=user_final_prompt, timeout=timeout)
+
+        return response, success
 
     def summarize_chunks(self, metadata_s, max_length, using_model, using_prompt, language, timeout):
         """ 파일별 코드 청크를 나누고 개별 청크를 요약 """
@@ -994,6 +975,8 @@ class LLM_Analyze_Prompt_Thread(QThread):
 
     def generate_final_analysis(self, chunk_summaries=None, using_model="gpt-4o-mini",
                                 using_prompt=None, language="english", timeout=300.0):
+        if not self.running:
+            return "최종 요약 결과 도출 전 강제 종료 되었습니다."
 
         """ 전체 요약 결과를 바탕으로 최종 분석 요청 """
         if chunk_summaries is None:
@@ -1005,41 +988,15 @@ class LLM_Analyze_Prompt_Thread(QThread):
                     "\n\n".join(chunk_summaries) +
                     f"\n\nWrite the final result incorporating any necessary additional feedback from the content above. Write in {language}"
             )
-        # if chunk_summaries is None:
-        #     user_final_prompt = (
-        #         f"{using_prompt['user_prompt']}.  Answer in {language}"
-        #     )
-        # else:
-        #     user_final_prompt = (
-        #             "\n\n".join(chunk_summaries) +
-        #             f"\n\n{using_prompt['user_prompt']}.  Answer in {language}"
-        #     )
 
         system_final_prompt = (
             f"{using_prompt['system_prompt']}."
         )
 
-        # print("Final Prompt")
-        # print(system_final_prompt)
-        # print(user_final_prompt)
+        response, success = self.openai_request(using_model=using_model, system_final_prompt=system_final_prompt,
+                                                user_final_prompt=user_final_prompt, timeout=timeout)
 
-        try:
-            response = self.client.chat.completions.create(
-                model=using_model,
-                messages=[
-                    {"role": "system", "content": system_final_prompt},
-                    {"role": "user", "content": user_final_prompt}
-                ],
-                timeout=timeout  # openai 라이브러리에서는 request_timeout 사용
-            )
-            return response.choices[0].message.content
-
-        except openai.OpenAIError as e:  # OpenAI 관련 오류
-            return f"[Timed Out] OpenAI API Error: {str(e)} --> {timeout} s"
-
-        except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
-            import traceback
-            return f"[Error] Unexpected error: {str(e)}\n{traceback.format_exc()}"
+        return response
 
     def analyze_project(self, folder_path, user_contents, max_length=3000, using_model="gpt-4o-mini",
                         prompt=None,
@@ -1071,25 +1028,21 @@ class LLM_Analyze_Prompt_Thread(QThread):
         chunk_summaries, ret = self.summarize_chunks(metadata_s=metadata, max_length=max_length,
                                                      using_model=using_model,
                                                      using_prompt=prompt, language=language, timeout=timeout)
+
+        summarize_chunk_data = "\n\n".join(chunk_summaries)
+        self.chunk_analyzed_sig.emit(summarize_chunk_data)
+
         if ret:
             if len(chunk_summaries) == 0:
                 return f"[Error] Fail to Chunk Summary"
         else:
             return "\n".join(chunk_summaries)
 
-        summarize_chunk_data = "\n\n".join(chunk_summaries)
-        self.chunk_analyzed_sig.emit(summarize_chunk_data)
-
         # 2. chunking 데이터를 LLM에 넣어 분석 결과 도출 단계
         result_message = self.generate_final_analysis(chunk_summaries=chunk_summaries, using_model=using_model,
                                                       using_prompt=prompt, language=self.language, timeout=timeout)
 
-        overall_report = {
-            "result_message": result_message,
-            "summarize_chunk_data": summarize_chunk_data
-        }
-
-        return overall_report
+        return result_message
 
     def run(self) -> None:
         # 코드 작성
@@ -1108,10 +1061,18 @@ class LLM_Analyze_Prompt_Thread(QThread):
                 result_message = f"API Request Error: {str(e)}"
             except Exception as e:
                 result_message = f"An unexpected error occurred: {str(e)}\n{traceback.format_exc()}"
+                print(result_message)  # 로그 출력
+                sys.exit(1)  # 비정상 종료 (exit code 1
 
         self.finished_analyze_sig.emit(result_message)
 
     def stop(self):
-        self.running = False
-        self.quit()
-        self.wait(3000)
+        """Stop the thread and close the session"""
+        self.running = False  # 종료 플래그 설정
+        # First, ensure the session is closed safely
+        if self.session:
+            self.session.close()
+
+        # Now, quit the thread and wait for it to finish
+        self.quit()  # Quit the event loop
+        self.wait()  # Wait for the thread to finish
