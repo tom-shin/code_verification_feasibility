@@ -31,9 +31,13 @@ from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar, QPushButton, QHBoxLayout, QSpacerItem, \
     QSizePolicy, QRadioButton, QWidget, QMessageBox, QFileDialog, QApplication, QFileSystemModel
 
-# from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
-# from langchain_text_splitters import MarkdownHeaderTextSplitter
-# from langchain_text_splitters import CharacterTextSplitter
+from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
+from langchain_text_splitters import MarkdownHeaderTextSplitter
+from langchain_text_splitters import CharacterTextSplitter
+from langchain_community.document_loaders import (
+    PythonLoader, NotebookLoader, TextLoader, JSONLoader, TextLoader, UnstructuredFileLoader
+)
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 logging.basicConfig(level=logging.INFO)
 
@@ -815,6 +819,7 @@ class LoadDirectoryThread(QThread):
 class RequestLLMThread(QThread):
     finished_analyze_sig = pyqtSignal(str)
     chunk_analyzed_sig = pyqtSignal(str)
+    analysis_progress_sig = pyqtSignal(str)
 
     def __init__(self, ctrl_params):
         super().__init__()
@@ -859,7 +864,7 @@ class RequestLLMThread(QThread):
         for file_path in file_paths:
             try:
                 with open(file_path, 'r', encoding='utf-8') as file:
-                    content = file.read()
+                    content = file.read()  # 전체 내용을 하나의 string으로 읽어 오기
                     file_metadata.append({
                         "file_name": os.path.basename(file_path),
                         "file_path": file_path,
@@ -872,8 +877,8 @@ class RequestLLMThread(QThread):
         return file_metadata, error
 
     @staticmethod
-    def chunk_logic_algorithm(text, max_length, overlap=2):
-        """ def/class 단위로 코드 청크 분할 """
+    def slice_chunk_algorithm(text, max_length, overlap=2):
+        """ 어떻게 slice 할 건지 .... def/class 단위로 코드 청크 분할 """
         pattern = r"^(def |class )"
         lines = text.split("\n")
 
@@ -896,52 +901,78 @@ class RequestLLMThread(QThread):
 
         return chunks
 
-    def openai_request(self, using_model, system_final_prompt, user_final_prompt, timeout):
-        PRINT_("<<<   New Open Protocol     >>>>", self.running)
-        """Make HTTP request and handle the response"""
-        try:
-            # Example API URL (replace with your actual API URL)
-            url = "https://api.openai.com/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",  # Set your OpenAI API key
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": f"{using_model}",
-                "messages": [
-                    {"role": "system", "content": system_final_prompt},
-                    {"role": "user", "content": user_final_prompt}
-                ],
-            }
+    def read_all_raw_data(self, folder_path=None, user_contents=""):
+        if folder_path is None:
+            metadata = [{
+                "file_name": "unknown",
+                "file_path": "unknown",
+                "content": user_contents
+            }]
+            return metadata, True
 
-            response = self.session.post(url, json=payload, headers=headers, timeout=timeout)
+        file_paths = self.get_file_list(folder_path=folder_path)
+        if len(file_paths) == 0:
+            return "[Error] File or Directory not existed.", False
 
-            if response.status_code == 200:
-                chat_response = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                return chat_response, True
-            else:
-                return f"Error: {response.status_code} - {response.text}", False
-        except requests.exceptions.RequestException as e:
-            return f"\nRequest error: {e}", False
+        metadata, error_msg = self.read_files(file_paths=file_paths)
+        if len(metadata) == 0:
+            return f"[Error] File Reading Error\n{error_msg}", False
 
-    def org_openai_request(self, using_model, system_final_prompt, user_final_prompt, timeout):
-        try:
-            response = self.client.chat.completions.create(
-                model=using_model,
-                messages=[
-                    {"role": "system", "content": system_final_prompt},
-                    {"role": "user", "content": user_final_prompt}
-                ],
-                timeout=timeout  # openai 라이브러리에서는 request_timeout 사용
-            )
-            return response.choices[0].message.content, True
+        return metadata, True
 
-        except openai.OpenAIError as e:  # OpenAI 관련 오류
-            return f"[Timed Out] OpenAI API Error: {str(e)} --> {timeout} s", False
+    def llm_request(self, using_model="gpt-4o-mini", system_final_prompt="", user_final_prompt="", timeout=300):
 
-        except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
-            import traceback
-            return f"[Error] Unexpected error: {str(e)}\n{traceback.format_exc()}", False
+        response, success = self.openai_request(using_model=using_model, system_final_prompt=system_final_prompt,
+                                                user_final_prompt=user_final_prompt, timeout=timeout)
+
+        return response, success
+
+    def openai_request(self, using_model, system_final_prompt, user_final_prompt, timeout, http_request=True):
+        if http_request:
+            PRINT_("<<<   New Open Protocol     >>>>", self.running)
+            """Make HTTP request and handle the response"""
+            try:
+                # Example API URL (replace with your actual API URL)
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",  # Set your OpenAI API key
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": f"{using_model}",
+                    "messages": [
+                        {"role": "system", "content": system_final_prompt},
+                        {"role": "user", "content": user_final_prompt}
+                    ],
+                }
+
+                response = self.session.post(url, json=payload, headers=headers, timeout=timeout)
+
+                if response.status_code == 200:
+                    chat_response = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return chat_response, True
+                else:
+                    return f"Error: {response.status_code} - {response.text}", False
+            except requests.exceptions.RequestException as e:
+                return f"\nRequest error: {e}", False
+        else:
+            try:
+                response = self.client.chat.completions.create(
+                    model=using_model,
+                    messages=[
+                        {"role": "system", "content": system_final_prompt},
+                        {"role": "user", "content": user_final_prompt}
+                    ],
+                    timeout=timeout  # openai 라이브러리에서는 request_timeout 사용
+                )
+                return response.choices[0].message.content, True
+
+            except openai.OpenAIError as e:  # OpenAI 관련 오류
+                return f"[Timed Out] OpenAI API Error: {str(e)} --> {timeout} s", False
+
+            except Exception as e:  # 기타 예외 (어떤 모듈에서 발생하는지 확인)
+                import traceback
+                return f"[Error] Unexpected error: {str(e)}\n{traceback.format_exc()}", False
 
     def summarize_text(self, chunk, using_model, using_prompt, language, timeout):
         if not self.running:
@@ -954,16 +985,16 @@ class RequestLLMThread(QThread):
             f"{using_prompt['system_prompt']}."
         )
 
-        response, success = self.openai_request(using_model=using_model, system_final_prompt=system_final_prompt,
-                                                user_final_prompt=user_final_prompt, timeout=timeout)
+        response, success = self.llm_request(using_model=using_model, system_final_prompt=system_final_prompt,
+                                             user_final_prompt=user_final_prompt, timeout=timeout)
 
         return response, success
 
-    def summarize_chunks(self, metadata_s, max_length, using_model, using_prompt, language, timeout):
+    def slice_chunk_request_llm(self, metadata_s, max_length, using_model, using_prompt, language, timeout):
         """ 파일별 코드 청크를 나누고 개별 청크를 요약 """
         chunk_summaries = []
-        for metadata in metadata_s:
-            chunks = self.chunk_logic_algorithm(text=metadata["content"], max_length=max_length)  # 청크 분할 로직
+        for metadata in metadata_s:  # metadata는 파일 한개 전체의 내용이 들어가 있음.
+            chunks = self.slice_chunk_algorithm(text=metadata["content"], max_length=max_length)  # 청크 분할 로직
             for chunk in chunks:
                 summary, ret = self.summarize_text(chunk=chunk, using_model=using_model, using_prompt=using_prompt,
                                                    language=language, timeout=timeout)  # 개별 청크 요약
@@ -993,41 +1024,25 @@ class RequestLLMThread(QThread):
             f"{using_prompt['system_prompt']}."
         )
 
-        response, success = self.openai_request(using_model=using_model, system_final_prompt=system_final_prompt,
-                                                user_final_prompt=user_final_prompt, timeout=timeout)
+        response, success = self.llm_request(using_model=using_model, system_final_prompt=system_final_prompt,
+                                             user_final_prompt=user_final_prompt, timeout=timeout)
 
         return response
 
-    def analyze_project(self, folder_path, user_contents, max_length=3000, using_model="gpt-4o-mini",
-                        prompt=None,
-                        language="english",
-                        timeout=300):
+    def analyze_project_file(self, folder_path, user_contents, max_length=3000, using_model="gpt-4o-mini",
+                             prompt=None,
+                             language="english",
+                             timeout=300):
 
-        # 1. 선택된 모든 파일의 내용을 읽어 오고 또는 사용자가 정의한 내용을 읽어와 일정한 크기로 chunking 하는 부분임
-        metadata = []
+        # 1. 선택된 모든 파일의 내용을 읽어 오기
+        rawData, ret = self.read_all_raw_data(folder_path=folder_path, user_contents=user_contents)
+        if not ret:
+            return rawData
 
-        if folder_path is not None:
-            """ 프로젝트 코드 파일을 분석하고 OpenAI로 평가 """
-            file_paths = self.get_file_list(folder_path=folder_path)
-            if len(file_paths) == 0:
-                return "[Error] File or Directory not existed."
-
-            metadata, error_msg = self.read_files(file_paths=file_paths)
-            if len(metadata) == 0:
-                return f"[Error] File Reading Error\n{error_msg}"
-
-        else:
-            metadata.append(
-                {
-                    "file_name": "unknown",
-                    "file_path": "unknown",
-                    "content": user_contents
-                }
-            )
-
-        chunk_summaries, ret = self.summarize_chunks(metadata_s=metadata, max_length=max_length,
-                                                     using_model=using_model,
-                                                     using_prompt=prompt, language=language, timeout=timeout)
+        # 2. 읽어온 데이터에 대해서 일정한 크기로 자른 후 자른 내용에 대해서 llm request하기
+        chunk_summaries, ret = self.slice_chunk_request_llm(metadata_s=rawData, max_length=max_length,
+                                                            using_model=using_model,
+                                                            using_prompt=prompt, language=language, timeout=timeout)
 
         summarize_chunk_data = "\n\n".join(chunk_summaries)
         self.chunk_analyzed_sig.emit(summarize_chunk_data)
@@ -1051,9 +1066,10 @@ class RequestLLMThread(QThread):
         else:
             try:
                 self.client = openai.OpenAI(api_key=self.api_key)
-                result_message = self.analyze_project(folder_path=self.root_dir, user_contents=self.user_contents,
-                                                      max_length=self.max_token_limit, using_model=self.llm,
-                                                      prompt=self.prompt, language=self.language, timeout=self.timeout)
+                result_message = self.analyze_project_file(folder_path=self.root_dir, user_contents=self.user_contents,
+                                                           max_length=self.max_token_limit, using_model=self.llm,
+                                                           prompt=self.prompt, language=self.language,
+                                                           timeout=self.timeout)
 
             except openai.AuthenticationError:
                 result_message = "Authentication Error: Please check your OpenAI API key."
@@ -1076,3 +1092,215 @@ class RequestLLMThread(QThread):
         # Now, quit the thread and wait for it to finish
         self.quit()  # Quit the event loop
         self.wait()  # Wait for the thread to finish
+
+
+# //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+# 파일 확장자에 맞는 로더 매핑
+EXTENSION_TO_LOADER = {
+    ".py": PythonLoader,
+    ".ipynb": NotebookLoader,
+    ".txt": TextLoader,
+    ".json": JSONLoader,
+    "default": UnstructuredFileLoader,
+}
+
+
+def load_file(file_path):
+    """
+    주어진 파일 경로에 맞는 로더를 사용하여 문서를 로드합니다.
+    :param file_path: 파일 경로
+    :return: 로드된 문서 리스트
+    """
+    file_extension = os.path.splitext(file_path)[1].lower()  # 파일 확장자 추출
+
+    # 해당 확장자에 맞는 로더를 찾음
+    if file_extension in EXTENSION_TO_LOADER:
+        loader_cls = EXTENSION_TO_LOADER[file_extension]
+    else:
+        loader_cls = EXTENSION_TO_LOADER["default"]
+
+    # 파일에 맞는 로더 생성
+    loader = DirectoryLoader(os.path.dirname(file_path), glob=os.path.basename(file_path), loader_cls=loader_cls)
+
+    # 파일 로드
+    return loader.load()
+
+
+def load_files(project_dir):
+    """
+    주어진 디렉토리에서 모든 파일을 찾아, 해당 파일 확장자에 맞는 로더를 사용하여 문서를 로드하고 결합합니다.
+    :param project_dir: 프로젝트 디렉토리 경로 또는 파일 경로
+    :return: 결합된 문서 리스트
+    """
+    all_docs = []
+
+    # project_dir이 파일인지 폴더인지 확인
+    if os.path.isfile(project_dir):
+        # 파일이 주어진 경우
+        docs = load_file(project_dir)
+        all_docs.extend(docs)  # 로드된 문서들을 결합
+
+    elif os.path.isdir(project_dir):
+        # project_dir이 폴더인 경우
+        for root, dirs, files in os.walk(project_dir):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                docs = load_file(file_path)
+                all_docs.extend(docs)  # 로드된 문서들을 결합
+
+    else:
+        raise ValueError(f"주어진 경로가 유효한 파일 또는 디렉토리가 아닙니다: {project_dir}")
+
+    return all_docs
+
+
+class CodeAnalysisThread(QThread):
+    finished_analyze_sig = pyqtSignal(str)
+    chunk_analyzed_sig = pyqtSignal(str)
+    analysis_progress_sig = pyqtSignal(str)
+
+    def __init__(self, ctrl_params):
+        super().__init__()
+
+        self.running = True
+
+        self.llm = ctrl_params["llm_model"]
+        self.output_language = ctrl_params["language"]
+        self.max_token_limit = ctrl_params["max_token_limit"]
+        self.project_dir = ctrl_params["project_src_file"]
+        self.user_contents = ctrl_params["user_contents"]        
+        self.user_prompt = f'{ctrl_params["user_prompt"]}. Answer in {self.output_language}.'
+        self.system_prompt = ctrl_params["system_prompt"]
+        self.max_context_size = 3
+        
+        self.OPENAI_API_KEY = ctrl_params["llm_key"]
+        self.OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+        self.HEADERS = {            
+            "Authorization": f"Bearer {self.OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        # 세션 생성
+        self.session = requests.Session()
+        self.session.headers.update(self.HEADERS)
+
+    def run(self):
+
+        self.analysis_progress_sig.emit("Read all File Data...")
+        
+        # 프로젝트 디렉토리 내 모든 파일을 확인하고, 파일 확장자에 맞는 로더를 선택하여 파일을 로드
+        # self.project_dir이 None인 경우 user_contents를 사용하도록 처리
+        if self.project_dir is None:
+            all_docs = [{"metadata": {"source": "user_input"}, "page_content": self.user_contents}]
+            # self.project_dir가 None인 경우, 파일 구조를 따로 지정
+            file_structure = "\n".join([doc['metadata']['source'] for doc in all_docs])  # doc['metadata']['source']로 접근
+        else:
+            # 프로젝트 디렉토리 내 모든 파일을 확인하고, 파일 확장자에 맞는 로더를 선택하여 파일을 로드
+            all_docs = load_files(project_dir=self.project_dir)
+            # 파일 구조를 LLM에 전달
+            file_structure = "\n".join([doc.metadata['source'] for doc in all_docs])  # 기존대로 doc.metadata['source']로 접근
+        
+        init_message = {
+            "model": f"{self.llm}",
+            "messages": [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": f"The overall code files and folder structure of the project are as follows:\n\n{file_structure}\n\nRemember this structure."}
+            ],
+        }
+
+        # 초기 파일 구조 전달
+        self._send_message(init_message)        
+        
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=self.max_token_limit, chunk_overlap=100)
+
+        for doc in all_docs:
+            # project_dir이 None인 경우
+            if self.project_dir is None:
+                file_name = os.path.basename(doc['metadata']['source'])
+                content = doc['page_content']
+            else:
+                # project_dir이 있는 경우 (기존 방식)
+                file_name = os.path.basename(doc.metadata['source'])
+                content = doc.page_content
+
+            self.analysis_progress_sig.emit(f"{file_name} Chunking...")
+            chunks = text_splitter.split_text(content)
+            previous_responses = []
+
+            for idx, chunk in enumerate(chunks):
+                context_messages = [{"role": "system", "content": self.system_prompt}]
+
+                for prev in previous_responses[-self.max_context_size:]:
+                    context_messages.append({"role": "assistant", "content": prev})
+
+                context_messages.append({
+                    "role": "user",
+                    "content": f"file name: {file_name} (Chunk {idx + 1}/{len(chunks)})\n{self.user_prompt} \n\n{chunk}"
+                })                
+
+                payload = {"model": self.llm, "messages": context_messages, "temperature": 0.3}
+
+                response = self._send_message(payload)
+
+                try:
+                    result = response["choices"][0]["message"]["content"]
+                    previous_responses.append(result)
+                    progress = f"Finished Chunk Analysis: {file_name} (Chunk {idx + 1}/{len(chunks)})"
+                    print(progress)
+                    self.analysis_progress_sig.emit(progress)
+                except:                    
+                    return                
+
+        summarize_chunk_data = "\n\n".join(previous_responses)
+        self.chunk_analyzed_sig.emit(summarize_chunk_data)
+
+        # 최종 프로젝트 분석 요청        
+        self.analysis_progress_sig.emit("Wait for Summarizing...")
+
+        final_payload = {
+            "model": self.llm,
+            "messages": [
+                {"role": "system", "content": self.system_prompt},
+                # {"role": "user", "content": f"\n{}코드를 분석해 주세요:\n\n{chunk}"
+
+                {"role": "user",
+                 "content": f"{summarize_chunk_data}\n\n Summarize above analysis"}
+            ],
+            "temperature": 0.3
+        }
+        response = self._send_message(final_payload)
+
+        if response:
+            final_result = response["choices"][0]["message"]["content"]
+            self.finished_analyze_sig.emit(final_result)
+        else:
+            self.finished_analyze_sig.emit("Fail to Analysis")
+
+    def stop(self):
+        """Stop the thread and close the session"""
+        self.running = False  # 종료 플래그 설정
+
+        # 세션 종료
+        self.session.close()
+
+        self.quit()  # Quit the event loop
+        self.wait()  # Wait for the thread to finish
+
+    def _send_message(self, payload):
+        """API 호출을 처리하는 내부 메서드"""
+        if not self.running:
+            self.analysis_progress_sig.emit("Terminated forcibly. Wait for normal closing")
+            return None
+
+        try:
+            response = self.session.post(self.OPENAI_API_URL, json=payload)  # 여기 수정됨!
+            if response.status_code == 200:
+
+                print("test\n\n", response.json())
+                return response.json()
+            else:
+                print(f"Fail to API Call: {response.status_code}, {response.text}")
+                return None
+        except requests.RequestException as e:
+            print(f"Fail to Requesst: {e}")
+            return None

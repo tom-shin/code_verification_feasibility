@@ -421,7 +421,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
             answer = QtWidgets.QMessageBox.question(self,
                                                     "Information ...",
                                                     "분석할 코드 폴더를 선택하지 않았습니다.\n Input Contents(code, text ...) 내용으로 진행 할 까요?",
-                                                    QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Yes)
+                                                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
 
             if answer == QtWidgets.QMessageBox.No:
                 return
@@ -486,9 +486,14 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
                                             )
         self.work_progress.progress_stop_sig.connect(self.close_progress_dialog)
 
-        self.llm_analyze_instance = RequestLLMThread(ctrl_params=ctrl_params)
+        self.llm_analyze_instance = CodeAnalysisThread(ctrl_params=ctrl_params)
+        # self.llm_analyze_instance = RequestLLMThread(ctrl_params=ctrl_params)
+
         self.llm_analyze_instance.finished_analyze_sig.connect(self.llm_analyze_result)
         self.llm_analyze_instance.chunk_analyzed_sig.connect(self.chunking_result)
+        # 분석 진행 상태를 업데이트하는 신호를 연결
+        self.llm_analyze_instance.analysis_progress_sig.connect(self.work_progress.onProgressTextChanged)
+
         self.llm_analyze_instance.start()
 
         self.work_progress.show_progress()

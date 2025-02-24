@@ -5,3 +5,7 @@ PyQt5-tools
 httpx
 fpdf
 reportlab
+requests
+langchain_community
+langchain_text_splitters
+langchain

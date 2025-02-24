@@ -80,7 +80,7 @@
          </property>
          <widget class="QWidget" name="tab_1">
           <attribute name="title">
-           <string>Control Window</string>
+           <string>Main Window</string>
           </attribute>
           <layout class="QGridLayout" name="gridLayout">
            <item row="2" column="0">
@@ -369,8 +369,8 @@
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>1159</width>
-                   <height>809</height>
+                   <width>98</width>
+                   <height>89</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_15">
@@ -410,8 +410,8 @@
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>1159</width>
-                   <height>809</height>
+                   <width>98</width>
+                   <height>89</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_7">

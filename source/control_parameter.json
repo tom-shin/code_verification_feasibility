@@ -1,38 +1,40 @@
 {
-    "Version": "Feasibility for Code Verification 0.2.1 (made by tom.shin)",
-
+    "Version": "Feasibility for Code Verification 0.3.0 (made by tom.shin)",
     "select_llm": "openai",
-
-    "llm_company":{
-
+    "llm_company": {
         "openai": {
-            "key": ["sk-", "BucaNVm1ibsxPUnxvWq8T3BlbkFJRGWPgBcKMtn1aorR2eYX"],
+            "key": [
+                "sk-",
+                "BucaNVm1ibsxPUnxvWq8T3BlbkFJRGWPgBcKMtn1aorR2eYX"
+            ],
             "llm_models": [
                 "gpt-4o-mini",
                 "gpt-4-turbo",
                 "gpt-4",
                 "gpt-3.5-turbo"
-                ],
+            ],
             "timeout": "300",
             "max_limit_token": 1000
         },
         "reserved": {
-            "key": ["xxx-", "xxxxxxxxxx"],
+            "key": [
+                "xxx-",
+                "xxxxxxxxxx"
+            ],
             "llm_models": [
                 "xxx",
                 "xxx"
-                ],
+            ],
             "timeout": "300",
             "max_limit_token": 1000
         }
-    },       
-    
-    "filter":{
+    },
+    "filter": {
         "include": [
             ".py",
             ".c",
             ".cpp"
-            ],
+        ],
         "exclude": [
             ".git",
             ".idea",
@@ -48,19 +50,17 @@
             "tool",
             "designer",
             "Gen-6"
-            ]
+        ]
     },
-    
-    "prompt":{
+    "prompt": {
         "system": [
             "You are a top-level expert with at least 30 years of experience in programming languages."
         ],
         "user": [
-            "The above is a summary of each part of the project, including file names and paths. Based on this, analyze the overall structure, relationships between files, code quality, and identify any issues or bugs in the code. Also, suggest improvements and provide example code improvements. and assess its quality using measurable metrics such as reliability, F1 score, or other relevant code quality indicators. Provide a numerical score along with a detailed explanation of the reasoning behind your assessment, including the logic used to determine the score.\n\nPlease provide the analysis and improvement suggestions.\n"
+            "First, Analyze the overall structure and the relationships between files. Assess the code quality, identify any issues or bugs, and suggest correct code.\nSecond, evaluate the quality of the code using measurable metrics such as reliability, F1 score, or other relevant code quality indicators. Provide a numerical score (out of 100 points per item) along with a detailed explanation of the reasoning behind each score, including the logic used to determine it.\n"
         ]
     },
     "example_content": [
         "[error_example.c]\n\nint main() {\nint a = 10;\nfloat b = 20;\nfloat *p = None\np = &a\nc = *p\nprint(a+c)\n"
     ]
-
 }
