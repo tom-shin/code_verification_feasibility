@@ -49,9 +49,9 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="deselectpushButton">
+        <widget class="QPushButton" name="codeview_pushButton">
          <property name="text">
-          <string>Deselect</string>
+          <string>Code View</string>
          </property>
         </widget>
        </item>
@@ -369,8 +369,8 @@
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>98</width>
-                   <height>89</height>
+                   <width>1159</width>
+                   <height>809</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_15">
@@ -410,8 +410,8 @@
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>98</width>
-                   <height>89</height>
+                   <width>1159</width>
+                   <height>809</height>
                   </rect>
                  </property>
                  <layout class="QVBoxLayout" name="verticalLayout_7">

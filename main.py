@@ -27,6 +27,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
         self.llm_analyze_instance = None
         self.t_load_project = None
         self.tree_view = None
+        self.last_selected_index = None
         self.file_model = None
         self.work_progress = None
 
@@ -55,6 +56,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
 
             self.tree_view = QtWidgets.QTreeView()
             self.tree_view.setModel(self.file_model)
+            self.tree_view.clicked.connect(self.on_item_selected)
 
             use_style = True
             if use_style:
@@ -184,14 +186,13 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
 
         self.mainFrame_ui.analyze_pushButton.clicked.connect(self.start_analyze)
 
-        self.mainFrame_ui.deselectpushButton.clicked.connect(self.deselect_file_dir)
+        # self.mainFrame_ui.deselectpushButton.clicked.connect(self.deselect_file_dir)
 
         self.mainFrame_ui.save_pushButton.clicked.connect(self.save_prompt)
 
         self.mainFrame_ui.get_pushButton.clicked.connect(self.get_prompt)
 
-        # Connect double-click signal to handler
-        self.tree_view.doubleClicked.connect(self.file_double_clicked)
+        self.mainFrame_ui.codeview_pushButton.clicked.connect(self.view_code)
 
     def setupGPTModels(self):
         row = 0  # 그리드 레이아웃의 첫 번째 행
@@ -222,14 +223,15 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
                 PRINT_(f"Selected GPT model: {radio_button.text()}")  # 선택된 버튼의 텍스트 출력
                 return radio_button.text()
 
-    def file_double_clicked(self, index):
+    def view_code(self):
         """Handle double-click event on a file in the QTreeView."""
-        file_path = self.file_model.filePath(index)
-
-        if self.file_model.isDir(index):
-            PRINT_("Double-clicked directory:", file_path)
+        if self.last_selected_index is None:
             return
-            # Handle directory (e.g., open it, show contents, etc.)
+
+        file_path = self.file_model.filePath(self.last_selected_index)
+        if os.path.isdir(file_path):
+            PRINT_("Select File")
+            return
 
         rt = load_module_func(module_name="source.ui_designer.fileedit")
 
@@ -287,11 +289,80 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
         self.tree_view.clearSelection()  # 기존 선택된 항목 해제
         self.tree_view.setCurrentIndex(QModelIndex())  # 현재 인덱스 초기화
 
+    def on_item_selected(self, index: QtCore.QModelIndex):
+        """파일 또는 폴더 선택/해제 (토글 기능)"""
+        if not index.isValid():
+            return
+
+        # 클릭한 항목이 이전에 선택한 것과 같다면 -> 선택 해제
+        if self.last_selected_index == index:
+            self.tree_view.clearSelection()  # 선택 해제
+            self.tree_view.setCurrentIndex(QtCore.QModelIndex())  # 현재 선택 초기화
+            self.last_selected_index = None  # 저장된 선택 해제
+            self.mainFrame_ui.user_textEdit.setEnabled(True)
+
+        else:
+            # 새로운 항목 선택
+            self.last_selected_index = index
+            # 예제 UI 요소 (텍스트 입력 활성화)
+            self.mainFrame_ui.user_textEdit.setEnabled(False)
+
     def finished_load_thread(self, m_dir=None):
+        # 작업 진행 표시가 있으면 닫기
         if self.work_progress is not None:
             self.work_progress.close()
 
         # 선택된 항목 초기화
+        self.last_selected_index = None  # 저장된 선택 해제
+        self.deselect_file_dir()  # 폴더나 파일 선택 해제 함수 호출
+
+        # m_dir이 None인 경우, 종료
+        if m_dir is None:
+            return
+
+        # 선택한 폴더를 탐색기에서 갱신
+        self.file_model.setRootPath(m_dir)  # 새 루트 경로 설정
+
+        # 새로운 디렉토리 경로에 대한 인덱스를 가져오기
+        index = self.file_model.index(m_dir)
+
+        # 선택한 폴더가 유효한지 확인
+        if index.isValid():
+            PRINT_("valid directory index.", m_dir)
+
+            # 파일 시스템 모델을 새로 설정하고 루트 경로를 갱신
+            self.tree_view.setModel(self.file_model)  # 새 모델 설정
+
+            # 루트 경로 설정 (디렉토리 변경)
+            self.tree_view.setRootIndex(index)  # 새로운 루트 경로 설정
+
+            # 선택 항목 초기화: 선택된 항목 없도록 설정
+            self.tree_view.clearSelection()  # 기존 선택 항목 해제
+            self.tree_view.setCurrentIndex(QtCore.QModelIndex())  # 선택된 항목 초기화
+
+            # 모델을 명시적으로 갱신 (UI 업데이트)
+            self.tree_view.viewport().update()
+
+            # 탐색기 메타 정보 표시
+            self.ctrl_meta_info(show=True)
+
+            # 탐색기 뷰가 이미 레이아웃에 추가된 경우 중복 추가 방지
+            if self.tree_view.parent() is None:
+                self.mainFrame_ui.explorer_verticalLayout.addWidget(self.tree_view)
+
+            # 탐색기 윈도우 표시 조정
+            self.explore_window_ctrl(always_show=True)
+
+        else:
+            PRINT_("Error: Invalid directory index.", m_dir)
+
+    def x_finished_load_thread(self, m_dir=None):
+        if self.work_progress is not None:
+            self.work_progress.close()
+
+        # 선택된 항목 초기화
+        # self.on_item_selected(QtCore.QModelIndex())
+        self.last_selected_index = None  # 저장된 선택 해제
         self.deselect_file_dir()
 
         if m_dir is None:
@@ -310,6 +381,8 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
             # 모델을 새로 설정하고 루트 인덱스를 다시 설정
             self.tree_view.setModel(None)  # 기존 모델 제거
             self.tree_view.setModel(self.file_model)  # 모델을 새로 설정
+
+            # self.tree_view.clicked.connect(self.on_item_selected)
 
             # 루트 경로 재설정
             self.tree_view.setRootIndex(index)  # 새로운 루트로 설정
@@ -362,6 +435,8 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
 
         if not m_dir:
             return
+
+        self.last_selected_index = None  # 저장된 선택 해제
 
         if self.mainFrame_ui.popctrl_radioButton.isChecked():
             modal_display = False
