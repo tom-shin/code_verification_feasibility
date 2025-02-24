@@ -1214,6 +1214,7 @@ class CodeAnalysisThread(QThread):
         
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=self.max_token_limit, chunk_overlap=100)
 
+        previous_responses = []
         for doc in all_docs:
             # project_dir이 None인 경우
             if self.project_dir is None:
@@ -1246,11 +1247,13 @@ class CodeAnalysisThread(QThread):
                 try:
                     result = response["choices"][0]["message"]["content"]
                     previous_responses.append(result)
-                    progress = f"Finished Chunk Analysis: {file_name} (Chunk {idx + 1}/{len(chunks)})"
-                    print(progress)
-                    self.analysis_progress_sig.emit(progress)
-                except:                    
-                    return                
+                    msg_progress = f"Finished Chunk Analysis: {file_name} (Chunk {idx + 1}/{len(chunks)})"
+                    self.analysis_progress_sig.emit(msg_progress)
+
+                except Exception as e:
+                    msg_progress = f"Process Stopped.\n {e}. "
+                    self.analysis_progress_sig.emit(msg_progress)
+                    break
 
         summarize_chunk_data = "\n\n".join(previous_responses)
         self.chunk_analyzed_sig.emit(summarize_chunk_data)
