@@ -1173,6 +1173,7 @@ class CodeAnalysisThread(QThread):
         self.user_prompt = f'{ctrl_params["user_prompt"]}. Answer in {self.output_language}.'
         self.system_prompt = ctrl_params["system_prompt"]
         self.max_context_size = 3
+        self.temperature = 0.3
         
         self.OPENAI_API_KEY = ctrl_params["llm_key"]
         self.OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
@@ -1238,7 +1239,7 @@ class CodeAnalysisThread(QThread):
                     "content": f"file name: {file_name} (Chunk {idx + 1}/{len(chunks)})\n{self.user_prompt} \n\n{chunk}"
                 })                
 
-                payload = {"model": self.llm, "messages": context_messages, "temperature": 0.3}
+                payload = {"model": self.llm, "messages": context_messages, "temperature": self.temperature}
 
                 response = self._send_message(payload)
 
@@ -1266,7 +1267,7 @@ class CodeAnalysisThread(QThread):
                 {"role": "user",
                  "content": f"{summarize_chunk_data}\n\n Summarize above analysis in {self.output_language}"}
             ],
-            "temperature": 0.3
+            "temperature": self.temperature
         }
         response = self._send_message(final_payload)
 
