@@ -1264,7 +1264,7 @@ class CodeAnalysisThread(QThread):
                 # {"role": "user", "content": f"\n{}코드를 분석해 주세요:\n\n{chunk}"
 
                 {"role": "user",
-                 "content": f"{summarize_chunk_data}\n\n Summarize above analysis"}
+                 "content": f"{summarize_chunk_data}\n\n Summarize above analysis in {self.output_language}"}
             ],
             "temperature": 0.3
         }
