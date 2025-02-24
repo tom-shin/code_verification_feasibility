@@ -87,6 +87,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
             # 스크롤 영역에 추가
             self.mainFrame_ui.explorer_scrollArea.setWidget(self.tree_view)
 
+        self.mainFrame_ui.tabWidget.setTabVisible(3, False)
         self.setWindowTitle(self.CONFIG_PARAMS["Version"])
 
     def closeEvent(self, event):
