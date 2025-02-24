@@ -1169,15 +1169,15 @@ class CodeAnalysisThread(QThread):
         self.output_language = ctrl_params["language"]
         self.max_token_limit = ctrl_params["max_token_limit"]
         self.project_dir = ctrl_params["project_src_file"]
-        self.user_contents = ctrl_params["user_contents"]        
+        self.user_contents = ctrl_params["user_contents"]
         self.user_prompt = f'{ctrl_params["user_prompt"]}. Answer in {self.output_language}.'
         self.system_prompt = ctrl_params["system_prompt"]
         self.max_context_size = 3
         self.temperature = 0.3
-        
+
         self.OPENAI_API_KEY = ctrl_params["llm_key"]
         self.OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-        self.HEADERS = {            
+        self.HEADERS = {
             "Authorization": f"Bearer {self.OPENAI_API_KEY}",
             "Content-Type": "application/json"
         }
@@ -1188,7 +1188,7 @@ class CodeAnalysisThread(QThread):
     def run(self):
 
         self.analysis_progress_sig.emit("Read all File Data...")
-        
+
         # 프로젝트 디렉토리 내 모든 파일을 확인하고, 파일 확장자에 맞는 로더를 선택하여 파일을 로드
         # self.project_dir이 None인 경우 user_contents를 사용하도록 처리
         if self.project_dir is None:
@@ -1200,45 +1200,48 @@ class CodeAnalysisThread(QThread):
             all_docs = load_files(project_dir=self.project_dir)
             # 파일 구조를 LLM에 전달
             file_structure = "\n".join([doc.metadata['source'] for doc in all_docs])  # 기존대로 doc.metadata['source']로 접근
-        
+
         init_message = {
             "model": f"{self.llm}",
             "messages": [
                 {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": f"The overall code files and folder structure of the project are as follows:\n\n{file_structure}\n\nRemember this structure."}
+                {"role": "user",
+                 "content": f"The overall code files and folder structure of the project are as follows:\n\n{file_structure}\n\nRemember this structure."}
             ],
         }
 
         # 초기 파일 구조 전달
-        self._send_message(init_message)        
-        
+        self._send_message(init_message)
+
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=self.max_token_limit, chunk_overlap=100)
 
-        previous_responses = []
+        previous_responses = []  # 모든 문서의 결과를 저장하는 리스트
+
         for doc in all_docs:
-            # project_dir이 None인 경우
+            # 파일 정보 가져오기
             if self.project_dir is None:
-                file_name = os.path.basename(doc['metadata']['source'])
+                file_name = doc['metadata']['source']
                 content = doc['page_content']
             else:
-                # project_dir이 있는 경우 (기존 방식)
-                file_name = os.path.basename(doc.metadata['source'])
+                file_name = doc.metadata['source']
                 content = doc.page_content
 
             self.analysis_progress_sig.emit(f"{file_name} Chunking...")
             chunks = text_splitter.split_text(content)
-            previous_responses = []
+
+            file_responses = []  # 파일별 응답 저장 리스트 (각 파일별 context 유지)
 
             for idx, chunk in enumerate(chunks):
                 context_messages = [{"role": "system", "content": self.system_prompt}]
 
+                # 최대 context size만큼 이전 응답 포함
                 for prev in previous_responses[-self.max_context_size:]:
                     context_messages.append({"role": "assistant", "content": prev})
 
                 context_messages.append({
                     "role": "user",
-                    "content": f"file name: {file_name} (Chunk {idx + 1}/{len(chunks)})\n{self.user_prompt} \n\n{chunk}"
-                })                
+                    "content": f"{chunk}\n\nfile name: {file_name} (Chunk {idx + 1}/{len(chunks)})\n{self.user_prompt}"
+                })
 
                 payload = {"model": self.llm, "messages": context_messages, "temperature": self.temperature}
 
@@ -1246,7 +1249,7 @@ class CodeAnalysisThread(QThread):
 
                 try:
                     result = response["choices"][0]["message"]["content"]
-                    previous_responses.append(result)
+                    file_responses.append(result)  # 파일별 응답 저장
                     msg_progress = f"Finished Chunk Analysis: {file_name} (Chunk {idx + 1}/{len(chunks)})"
                     self.analysis_progress_sig.emit(msg_progress)
 
@@ -1255,6 +1258,10 @@ class CodeAnalysisThread(QThread):
                     self.analysis_progress_sig.emit(msg_progress)
                     break
 
+            # 파일별 응답을 전체 응답 리스트에 추가
+            previous_responses.extend(file_responses)
+
+        # 모든 문서의 분석 결과를 합쳐 요약 요청
         summarize_chunk_data = "\n\n".join(previous_responses)
         self.chunk_analyzed_sig.emit(summarize_chunk_data)
 
@@ -1265,10 +1272,8 @@ class CodeAnalysisThread(QThread):
             "model": self.llm,
             "messages": [
                 {"role": "system", "content": self.system_prompt},
-                # {"role": "user", "content": f"\n{}코드를 분석해 주세요:\n\n{chunk}"
-
                 {"role": "user",
-                 "content": f"{summarize_chunk_data}\n\n Summarize above analysis in {self.output_language}"}
+                 "content": f"\n\n Summarize the following in {self.output_language}.\n\n{summarize_chunk_data}"}
             ],
             "temperature": self.temperature
         }
