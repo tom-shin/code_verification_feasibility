@@ -575,6 +575,7 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
 
         super().__init__(parent)
 
+        self.closed_by_code = False
         self.setWindowTitle(message)
 
         self.unknown_max_limit = unknown_max_limit
@@ -611,9 +612,6 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
         layout.addLayout(h_layout)
         self.setLayout(layout)
 
-        # Close button click event
-        self.close_button.clicked.connect(self.close)
-
         # Show or hide the close button based on 'show'
         if show:
             self.close_button.show()
@@ -629,11 +627,20 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
             # Remove the progress bar format (e.g., "%" sign)
             self.progress_bar.setFormat("")  # No percentage displayed
 
-        self.timer.timeout.connect(self.toggle_radio_button)
-        self.timer.start(100)  # 500ms interval
-
         self.cnt = 0
         self.on_count_changed_params_itself = on_count_changed_params_itself
+
+        self.connectSlotSignal()
+
+        # Hide the X button and ? (Help) button at the top-right corner
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowCloseButtonHint & ~Qt.WindowContextHelpButtonHint)
+
+    def connectSlotSignal(self):
+        # Close button click event
+        self.close_button.clicked.connect(self.close_dialog)
+
+        self.timer.timeout.connect(self.toggle_radio_button)
+        self.timer.start(100)
 
     def getProgressBarMaximumValue(self):
         return self.max_cnt
@@ -679,10 +686,26 @@ class ProgressDialog(QDialog):  # This class will handle both modal and non-moda
                     """)
         self.radio_state = not self.radio_state
 
+    def close_dialog(self):
+        self.closed_by_code = True
+        self.close()  # close() 호출 -> closeEvent 실행됨
+
     def closeEvent(self, event):
+        # Stop the timer and emit the stop signal first
         self.timer.stop()
-        event.accept()
         self.progress_stop_sig.emit()
+
+        # Check if the dialog was closed by code or user
+        if self.closed_by_code:
+            PRINT_("Closed by Code")
+        else:
+            PRINT_("Closed by User")
+
+        # Reset the closed_by_code flag
+        self.closed_by_code = False
+
+        # Accept the event to close the dialog
+        event.accept()
 
 
 class ColonLineHighlighter(QSyntaxHighlighter):
