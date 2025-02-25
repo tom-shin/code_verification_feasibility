@@ -1238,9 +1238,10 @@ class CodeAnalysisThread(QThread):
                 for prev in previous_responses[-self.max_context_size:]:
                     context_messages.append({"role": "assistant", "content": prev})
 
+                message_added = "Additionally, when analyzing, if file information is available, provide details about each file separately. Specify what kind of file it is and its role in the overall structure. When presenting this information in the response, start with [file information] on a new line, followed by the details from the next line onward."
                 context_messages.append({
                     "role": "user",
-                    "content": f"{chunk}\n\nfile name: {file_name} (Chunk {idx + 1}/{len(chunks)})\n{self.user_prompt}"
+                    "content": f"{chunk}\n\nfile name: {file_name} (Chunk {idx + 1}/{len(chunks)})\n{self.user_prompt}\n{message_added}"
                 })
 
                 payload = {"model": self.llm, "messages": context_messages, "temperature": self.temperature}
@@ -1268,6 +1269,7 @@ class CodeAnalysisThread(QThread):
         # 최종 프로젝트 분석 요청        
         self.analysis_progress_sig.emit("Wait for Summarizing...")
 
+        # >>>>>>>>>>> summarize_chunk_data가 매우 큰 경우에 대하여 다시 split 할 필요가 있음.
         final_payload = {
             "model": self.llm,
             "messages": [

@@ -57,7 +57,7 @@
             "You are a top-level expert with at least 30 years of experience in programming languages."
         ],
         "user": [
-            "First, Analyze the overall structure and the relationships between files. Assess the code quality, identify any issues or bugs, and suggest correct code.\nSecond, evaluate the quality of the code using measurable metrics such as reliability, F1 score, or other relevant code quality indicators. Provide a numerical score (out of 100 points per item) along with a detailed explanation of the reasoning behind each score, including the logic used to determine it.\n"
+            "First, analyze the overall structure and the relationships between files. Assess the code quality, identify any issues or bugs, and suggest correct code.\nSecond, evaluate the quality of the code using measurable metrics such as reliability, F1 score, or other relevant code quality indicators. Provide a numerical score (out of 100 points per item) along with a detailed explanation of the reasoning behind each score, including the logic used to determine it.\n"
         ]
     },
     "example_content": [
