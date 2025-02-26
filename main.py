@@ -90,6 +90,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
             self.mainFrame_ui.explorer_scrollArea.setWidget(self.tree_view)
 
         self.mainFrame_ui.tabWidget.setTabVisible(3, False)
+        self.mainFrame_ui.tabWidget.setTabVisible(1, False)
         self.setWindowTitle(self.CONFIG_PARAMS["Version"])
 
     def closeEvent(self, event):
