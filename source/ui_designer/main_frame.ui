@@ -274,7 +274,7 @@
                       <string>Korean</string>
                      </property>
                      <property name="checked">
-                      <bool>true</bool>
+                      <bool>false</bool>
                      </property>
                     </widget>
                    </item>
@@ -282,6 +282,9 @@
                     <widget class="QRadioButton" name="english_radioButton">
                      <property name="text">
                       <string>English</string>
+                     </property>
+                     <property name="checked">
+                      <bool>true</bool>
                      </property>
                     </widget>
                    </item>
@@ -347,7 +350,7 @@
          </widget>
          <widget class="QWidget" name="tab_2">
           <attribute name="title">
-           <string>Summary Result</string>
+           <string>Analysis Result</string>
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_13">
            <item>

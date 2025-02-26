@@ -57,7 +57,7 @@
             "You are a top-level expert with at least 30 years of experience in programming languages."
         ],
         "user": [
-            "First, as an expert, perform a static analysis of the code based on classes or functions to identify issues or bugs, and suggest improvements for the code. \nSecond, assess the code quality using metrics like reliability and F1 score, providing a numerical score (out of 100) with a brief explanation. \nLastly, include the file name followed by the function or class name at the beginning of your response, and then provide the analysis details below."
+            "첫째, 당신은 전문가로서 코드 정적 분석 수행 하고 이슈 또는 버그 발견 시 이슈 발생한 코드와 수정 코드 함께 제시 해 주세요.\n둘째, 신뢰도, F1와 같은 측정 방법을 이용하여 100점 만점으로 표현 해 주고 점수에 대한 산출 근거를 함께 제시 해 주세요.\n마지막으로 수정코드를 제안 할 때 항상 가장 앞에 파일명을 작성해 주고 그 이후에 관련 설명을 해 주세요."
         ]
     },
     "example_content": [

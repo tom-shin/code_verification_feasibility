@@ -89,8 +89,8 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
             # 스크롤 영역에 추가
             self.mainFrame_ui.explorer_scrollArea.setWidget(self.tree_view)
 
+        self.mainFrame_ui.tabWidget.setTabVisible(2, False)
         self.mainFrame_ui.tabWidget.setTabVisible(3, False)
-        self.mainFrame_ui.tabWidget.setTabVisible(1, False)
         self.setWindowTitle(self.CONFIG_PARAMS["Version"])
 
     def closeEvent(self, event):
@@ -472,11 +472,17 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
     def llm_analyze_result(self, summary_message):
         self.mainFrame_ui.tabWidget.setCurrentIndex(1)
 
-        summary = f"# [Summary Result]\n\n{summary_message}\n\n\n"
-        self.mainFrame_ui.llmresult_textEdit.setMarkdown(summary)
+        # summary = f"# [Summary Result]\n\n{summary_message}\n\n\n"
+        # self.mainFrame_ui.llmresult_textEdit.setMarkdown(summary)
+        #
+        # detailed_summary = "# " + self.getChunkResult()
+        # overall_report = f"{summary}\n\n\n{detailed_summary}\n\n-End-"
 
-        detailed_summary = "# " + self.getChunkResult()
+        summary = f"# [Analysis Result]\n\n{summary_message}\n\n\n"
+        self.mainFrame_ui.llmresult_textEdit.setMarkdown(summary)
+        detailed_summary = ""
         overall_report = f"{summary}\n\n\n{detailed_summary}\n\n-End-"
+
         self.saveTestResult(message=overall_report)
 
         if self.work_progress is not None:

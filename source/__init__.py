@@ -1323,10 +1323,11 @@ class CodeAnalysisThread(QThread):
             previous_responses.extend(file_responses)
 
         summarize_chunk_data = "\n\n".join(previous_responses)
-        self.chunk_analyzed_sig.emit(summarize_chunk_data)
+
+        # self.chunk_analyzed_sig.emit(summarize_chunk_data)
 
         # # 요약 데이터가 너무 크다면 다시 분할
-        final_result = ""
+        final_result = summarize_chunk_data
         # self.analysis_progress_sig.emit("Wait for Summarizing...")
         # final_result = self.recursive_summarization(summaries=summarize_chunk_data)
         self.finished_analyze_sig.emit(final_result)

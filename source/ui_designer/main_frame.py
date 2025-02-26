@@ -163,10 +163,11 @@ class Ui_MainWindow(object):
         self.verticalLayout_16 = QtWidgets.QVBoxLayout(self.groupBox_2)
         self.verticalLayout_16.setObjectName("verticalLayout_16")
         self.korean_radioButton = QtWidgets.QRadioButton(self.groupBox_2)
-        self.korean_radioButton.setChecked(True)
+        self.korean_radioButton.setChecked(False)
         self.korean_radioButton.setObjectName("korean_radioButton")
         self.verticalLayout_16.addWidget(self.korean_radioButton)
         self.english_radioButton = QtWidgets.QRadioButton(self.groupBox_2)
+        self.english_radioButton.setChecked(True)
         self.english_radioButton.setObjectName("english_radioButton")
         self.verticalLayout_16.addWidget(self.english_radioButton)
         self.verticalLayout_4.addWidget(self.groupBox_2)
@@ -320,7 +321,7 @@ class Ui_MainWindow(object):
         self.label.setText(_translate("MainWindow", "Time Out [sec.]"))
         self.timeoutlineEdit.setText(_translate("MainWindow", "300"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_1), _translate("MainWindow", "Main Window"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Summary Result"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Analysis Result"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_3), _translate("MainWindow", "Detail Result (Chunk Data)"))
         self.embed_textEdit.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
 "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
