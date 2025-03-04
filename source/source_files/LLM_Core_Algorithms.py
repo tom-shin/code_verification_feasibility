@@ -583,9 +583,9 @@ def general_openai_api():
 
 
 def openai_assistant_api():
-    temperature = 0.2
+    temperature = 0.4
     system_prompt = "You are a top-level expert with at least 30 years of experience in program source code.\n"
-    include = [".py", ".c", ".zip", ]  # 업로드할 파일 확장자 리스트
+    include = [".py", ".c", ".cpp", ".zip", ]  # 업로드할 파일 확장자 리스트
 
     ctrl_params = {
         "llm_key": "",
@@ -615,15 +615,15 @@ def openai_assistant_api():
                 result = openai_assistants_api_instance.get_run_results(run_id_analysis, thread_id_analysis)
                 print("".join(result))
 
-            # print("Dynamic Analysis .............................................")
-            # user_prompt = "Please analyze the code dynamically and track its behavior."
-            # run_id_analysis, thread_id_analysis = openai_assistants_api_instance.start_analysis(assistant_id, file_ids,
-            #                                                                                     analysis_message=user_prompt,
-            #                                                                                     temperature=temperature)
+            print("Dynamic Analysis .............................................")
+            user_prompt = "Please analyze the code dynamically and track its behavior."
+            run_id_analysis, thread_id_analysis = openai_assistants_api_instance.start_analysis(assistant_id, file_ids,
+                                                                                                analysis_message=user_prompt,
+                                                                                                temperature=temperature)
 
-            # if openai_assistants_api_instance.wait_for_run_completion(run_id_analysis, thread_id_analysis):
-            #     result = openai_assistants_api_instance.get_run_results(run_id_analysis, thread_id_analysis)
-            #     print("".join(result))
+            if openai_assistants_api_instance.wait_for_run_completion(run_id_analysis, thread_id_analysis):
+                result = openai_assistants_api_instance.get_run_results(run_id_analysis, thread_id_analysis)
+                print("".join(result))
 
     except Exception as e:
         print(f"전체 실행 중 에러 발생: {e}")  # 전체 예외 메시지 출력
