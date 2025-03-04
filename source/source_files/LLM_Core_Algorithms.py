@@ -583,7 +583,7 @@ def general_openai_api():
 
 
 def openai_assistant_api():
-    temperature = 0.4
+    temperature = 0.5
     system_prompt = "You are a top-level expert with at least 30 years of experience in program source code.\n"
     include = [".py", ".c", ".cpp", ".zip", ]  # 업로드할 파일 확장자 리스트
 
