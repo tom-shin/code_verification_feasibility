@@ -1,25 +1,54 @@
-import os
-import sys
-import traceback
-import requests
-import ast
-import tiktoken
 import time
+import traceback
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+import sys
+import os
+import subprocess
 import json
+import chardet
+import shutil
 import re
+import itertools
+import platform
+import uuid
+import logging
+import threading
+import openai
+from openai._exceptions import OpenAIError, AuthenticationError
+import httpx
+import requests
+from collections import OrderedDict
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, Future
+import tiktoken
+import ast
+# from reportlab.pdfgen import canvas
+
+from PyQt5 import QtCore, QtWidgets, QtGui
+from PyQt5.QtCore import pyqtSignal, QTimer, Qt, QThread, QObject, QModelIndex
+from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar, QPushButton, QHBoxLayout, QSpacerItem, \
+    QSizePolicy, QRadioButton, QWidget, QMessageBox, QFileDialog, QApplication, QFileSystemModel
+
 from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.document_loaders import (
-    PythonLoader, NotebookLoader, TextLoader, JSONLoader, UnstructuredFileLoader
+    PythonLoader, NotebookLoader, TextLoader, JSONLoader, TextLoader, UnstructuredFileLoader
 )
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-
 
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-_]|[[0-?]*[ -/]*[@-~])')
 
 
+def handle_exception(e):
+    traceback.print_exc()  # 상세한 traceback 정보 출력
+    sys.exit(1)  # 강제 종료
+    
+    
 class FileManager:
     EXTENSION_TO_LOADER = {
         ".py": PythonLoader,
@@ -37,6 +66,11 @@ class FileManager:
             ".git", ".idea", "pycache", ".zip", ".pdf", ".xlsx", ".bin", ".bat", ".onnx", "tflite", "caffe", "tool", "designer", "Gen-6"
             ]
     }
+
+    @staticmethod
+    def handle_exception(e):        
+        traceback.print_exc()  # 상세한 traceback 정보 출력
+        sys.exit(1)  # 강제 종료
 
     def load_file(self, file_path=None):
         try:
@@ -62,9 +96,7 @@ class FileManager:
             return loader.load()
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제 종료
+            handle_exception(e)
 
     def load_files(self, project_dir):
         try:
@@ -82,9 +114,92 @@ class FileManager:
             return all_docs
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제 종료
+            handle_exception(e)
+
+    def json_dump_f(self, file_path, data, use_encoding=False):
+        try:
+            if file_path is None:
+                return False
+
+            if not file_path.endswith(".json"):
+                file_path += ".json"
+
+            if use_encoding:
+                with open(file_path, 'rb') as f:
+                    result = chardet.detect(f.read())
+                    encoding = result['encoding']
+            else:
+                encoding = "utf-8"
+
+            with open(file_path, "w", encoding=encoding) as f:
+                json.dump(data, f, indent=4, ensure_ascii=False, sort_keys=False)
+
+            return True
+
+        except Exception as e:
+            handle_exception(e)
+
+    def json_load_f(self, file_path, use_encoding=False):
+        try:
+            if file_path is None:
+                return False, False
+
+            if use_encoding:
+                with open(file_path, 'rb') as f:
+                    result = chardet.detect(f.read())
+                    encoding = result['encoding']
+            else:
+                encoding = "utf-8"
+
+            with open(file_path, "r", encoding=encoding) as f:
+                json_data = json.load(f, object_pairs_hook=OrderedDict)
+
+            return True, json_data
+
+        except Exception as e:
+            handle_exception(e)
+
+    def save2html(self, file_path, data, use_encoding=False):
+        try:
+            if file_path is None:
+                return False
+
+            if not file_path.endswith(".html"):
+                file_path += ".html"
+
+            if use_encoding:
+                with open(file_path, 'rb') as f:
+                    result = chardet.detect(f.read())
+                    encoding = result['encoding']
+            else:
+                encoding = "utf-8"
+
+            with open(file_path, "w", encoding=encoding) as f:
+                f.write(data)
+
+        except Exception as e:
+            handle_exception(e)
+
+    def save2txt(self, file_path, data, use_encoding=False):
+        try:
+            if file_path is None:
+                return False
+
+            if not file_path.endswith(".txt"):
+                file_path += ".txt"
+
+            if use_encoding:
+                with open(file_path, 'rb') as f:
+                    result = chardet.detect(f.read())
+                    encoding = result['encoding']
+            else:
+                encoding = "utf-8"
+
+            with open(file_path, "w", encoding=encoding) as f:
+                f.write(data)
+
+        except Exception as e:
+            handle_exception(e)
 
 
 class OpenAIAssistant:
@@ -101,6 +216,11 @@ class OpenAIAssistant:
         "gpt-4": 8000,
         "gpt-3.5-turbo": 4096
     }
+
+    @staticmethod
+    def handle_exception(e):        
+        traceback.print_exc()  # 상세한 traceback 정보 출력
+        sys.exit(1)  # 강제 종료
 
     def __init__(self, c_ctrl_params=None, default_token=35000):
         try:
@@ -119,9 +239,7 @@ class OpenAIAssistant:
             self.path_for_file_analysis = ""
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제
+            handle_exception(e)
 
     def upload_files(self, file_paths, include=None):
         print(f"파일 업로드 시작: {file_paths}")
@@ -174,9 +292,7 @@ class OpenAIAssistant:
             self.path_for_file_analysis = file_paths
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제 종료
+            handle_exception(e)
 
         return file_ids
 
@@ -198,9 +314,7 @@ class OpenAIAssistant:
                 raise Exception(f"어시스턴트 생성 실패: {create_assistant_response.text}")
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제 종료
+            handle_exception(e)
 
     def create_thread(self):
         try:
@@ -212,9 +326,7 @@ class OpenAIAssistant:
                 raise Exception(f"스레드 생성 실패: {create_thread_response.text}")
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제 종료
+            handle_exception(e)
 
     def start_analysis(self, assistant_id, file_ids,
                        analysis_message=f"소스 파일 코드에 대해서 정적 분석 수행 하세요\n. 이슈 및 버그 코드에 대해서 개선 코드 제안 해 주세요\n",
@@ -237,9 +349,7 @@ class OpenAIAssistant:
                 raise Exception(f"메시지 추가 실패: {add_message_response.text}")
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제 종료
+            handle_exception(e)
 
         try:
             run_url = f"{self.base_url}/threads/{thread_id}/runs"
@@ -258,9 +368,7 @@ class OpenAIAssistant:
                 raise Exception(f"정적 분석 실패: {run_response.text}")
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제 종료
+            handle_exception(e)
 
     def wait_for_run_completion(self, run_id, thread_id, interval=2):
         cnt = 0
@@ -271,9 +379,7 @@ class OpenAIAssistant:
                     raise Exception(f"실행 상태 조회 실패: {status_response.text}")
 
             except Exception as e:
-                print(f"에러 메시지: {e}")  # 예외 메시지 출력
-                traceback.print_exc()  # 상세한 traceback 정보 출력
-                sys.exit(1)  # 강제 종료
+                handle_exception(e)
 
             run_status = status_response.json()
             status = run_status.get("status", "unknown")
@@ -314,9 +420,7 @@ class OpenAIAssistant:
                 raise Exception(f"결과 조회 실패: {result_response.text}")
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제 종료
+            handle_exception(e)
 
     def close(self):
         """세션 닫기"""
@@ -334,6 +438,11 @@ class OpenAISession:
         "gpt-3.5-turbo": 4096
     }
 
+    @staticmethod
+    def handle_exception(e):        
+        traceback.print_exc()  # 상세한 traceback 정보 출력
+        sys.exit(1)  # 강제 종료
+
     def __init__(self, c_ctrl_params=None, default_token=35000):
         try:
             self.api_key = c_ctrl_params["llm_key"]
@@ -350,9 +459,7 @@ class OpenAISession:
             self.assistant_message_history = []
 
         except Exception as e:
-            print(f"에러 메시지: {e}")  # 예외 메시지 출력
-            traceback.print_exc()  # 상세한 traceback 정보 출력
-            sys.exit(1)  # 강제
+            handle_exception(e)
 
     def langchain_based_algorithm(self, string_content, f_limit_token):
         print("Called langchain_based_algorithm...")
@@ -502,9 +609,7 @@ class OpenAISession:
                     sys.exit(1)
 
         except Exception as e:
-            print(f"에러 메시지: {e}")
-            traceback.print_exc()
-            sys.exit(1)
+            handle_exception(e)
 
     def chat_completions_all_together(self, user_content='', system_content='', temperature=0.7, num_history=0):
         if num_history < 0:
@@ -532,9 +637,7 @@ class OpenAISession:
                 sys.exit(1)
 
         except Exception as e:
-            print(f"에러 메시지: {e}")
-            traceback.print_exc()
-            sys.exit(1)
+            handle_exception(e)
         
     def close(self):
         """세션 닫기"""
@@ -542,18 +645,18 @@ class OpenAISession:
 
 
 def general_openai_api():
-    api_method = True
+    api_method = False
 
-    max_token = 5000  # 최대 입력 토큰 수
-    min_token = 512  # 최소 토큰 수 이하인 경우 인접 블록과 합침
+    max_token = 512  # 최대 입력 토큰 수
+    min_token = 256  # 최소 토큰 수 이하인 경우 인접 블록과 합침
     num_history_cnt = 3  # 과거 3개 기억하기
     temperature = 0.3
-    use_hybrid = False
+    use_hybrid = True
     system_prompt = "당신은 프로그램 코딩 경력이 최소 50년 이상 고급 기술자 입니다."
     user_prompt = "코드 정적 분석 해 주고, 에러, 버그 등 수정할 부분이 있으면 수정 코드 제시해 주세요"
 
     ctrl_params = {
-        "llm_key": "",
+        "llm_key": "sk-",
         "llm_model": "gpt-4o-mini"
     }
 
@@ -685,7 +788,13 @@ def openai_assistant_api():
                 print("".join(result))
 
     except Exception as e:
-        print(f"전체 실행 중 에러 발생: {e}")  # 전체 예외 메시지 출력
+        """예외 처리 메서드, 파일명과 줄 번호 정보 추가"""
+        exc_type, exc_value, exc_tb = sys.exc_info()  # 예외 정보 가져오기
+        file_name = exc_tb.tb_frame.f_code.co_filename  # 예외 발생 파일명
+        line_number = exc_tb.tb_lineno  # 예외 발생 줄 번호
+
+        print(f"에러 발생 파일: {file_name}, 라인: {line_number}")
+        print(f"에러 메시지: {e}")  # 예외 메시지 출력
         traceback.print_exc()  # 상세한 traceback 정보 출력
         sys.exit(1)  # 강제 종료
 
