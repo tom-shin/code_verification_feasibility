@@ -67,12 +67,9 @@ class FileManager:
             ]
     }
 
-    @staticmethod
-    def handle_exception(e):        
-        traceback.print_exc()  # 상세한 traceback 정보 출력
-        sys.exit(1)  # 강제 종료
-
     def load_file(self, file_path=None):
+        file_path = os.path.normpath(file_path)
+
         try:
             folder = os.path.dirname(file_path)  # 폴더 경로
             filename = os.path.basename(file_path)  # 파일 이름 (확장자 포함)
@@ -99,6 +96,8 @@ class FileManager:
             handle_exception(e)
 
     def load_files(self, project_dir):
+        project_dir = os.path.normpath(project_dir)
+
         try:
             all_docs = []
             for root, _, files in os.walk(project_dir):
@@ -216,11 +215,6 @@ class OpenAIAssistant:
         "gpt-4": 8000,
         "gpt-3.5-turbo": 4096
     }
-
-    @staticmethod
-    def handle_exception(e):        
-        traceback.print_exc()  # 상세한 traceback 정보 출력
-        sys.exit(1)  # 강제 종료
 
     def __init__(self, c_ctrl_params=None, default_token=35000):
         try:
@@ -438,11 +432,6 @@ class OpenAISession:
         "gpt-3.5-turbo": 4096
     }
 
-    @staticmethod
-    def handle_exception(e):        
-        traceback.print_exc()  # 상세한 traceback 정보 출력
-        sys.exit(1)  # 강제 종료
-
     def __init__(self, c_ctrl_params=None, default_token=35000):
         try:
             self.api_key = c_ctrl_params["llm_key"]
@@ -645,7 +634,7 @@ class OpenAISession:
 
 
 def general_openai_api():
-    api_method = False
+    api_method = True
 
     max_token = 512  # 최대 입력 토큰 수
     min_token = 256  # 최소 토큰 수 이하인 경우 인접 블록과 합침
@@ -660,7 +649,7 @@ def general_openai_api():
         "llm_model": "gpt-4o-mini"
     }
 
-    project_dir = f"/home/tom/work/python_project/test_sample/exynos_ai_studio_verifier/source/source_files"
+    project_dir = rf"C:\Work\tom\python_project\code_analysis_test\test_code"
 
     # 전체 파일을 한번에 읽어와 전체 contents 기반 split 진행
     if api_method:
