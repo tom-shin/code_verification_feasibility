@@ -5,7 +5,8 @@ import requests
 import ast
 import tiktoken
 import time
-
+import json
+import re
 from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_text_splitters import CharacterTextSplitter
@@ -13,6 +14,10 @@ from langchain_community.document_loaders import (
     PythonLoader, NotebookLoader, TextLoader, JSONLoader, UnstructuredFileLoader
 )
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+
+
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-_]|[[0-?]*[ -/]*[@-~])')
 
 
 class FileManager:
@@ -447,7 +452,61 @@ class OpenAISession:
 
         return new_chunks
 
-    def chat_completions(self, user_content='', system_content='', temperature=0.7, num_history=0):
+    def chat_completions_stream(self, user_content='', system_content='', temperature=0.7, num_history=0):
+        if num_history < 0:
+            history_range = num_history
+        else:
+            history_range = -num_history  # 양수를 음수로 변환
+
+        payload = {
+            "model": self.llm,
+            "messages": [
+                            {"role": "system", "content": system_content},
+                            {"role": "user", "content": user_content}
+                        ] + self.assistant_message_history[history_range:],  # 히스토리 사용
+            "temperature": temperature,
+            "stream": True  # 스트리밍 활성화
+        }
+
+        try:
+            with self.session.post(self.base_url, json=payload, stream=True) as a_response:
+                if a_response.status_code == 200:
+                    collected_messages = []
+                    for line in a_response.iter_lines():
+                        if line:
+                            decoded_line = line.decode("utf-8").strip()
+                            # ✅ JSON 파싱 전에 ANSI 코드 제거 적용
+                            decoded_line = ANSI_ESCAPE.sub('', decoded_line)
+
+                            if decoded_line.startswith("data: "):
+                                decoded_line = decoded_line[6:]  # "data: " 부분 제거
+
+                            if decoded_line == "[DONE]":  # 스트림 종료 신호
+                                break
+
+                            try:
+                                json_data = json.loads(decoded_line)
+                                if "choices" in json_data:
+                                    content = json_data["choices"][0]["delta"].get("content", "")
+                                    if content:
+                                        print(content, end="", flush=True)  # 실시간 출력
+                                        collected_messages.append(content)
+                            except json.JSONDecodeError:
+                                print(f"JSON 디코딩 오류 발생: {decoded_line}")
+
+                    response_content = "".join(collected_messages)
+                    self.assistant_message_history.append({"role": "assistant", "content": response_content})
+                    return response_content
+                else:
+                    print(f"[Error] requests.exceptions.RequestException: {a_response.status_code}, {a_response.text}")
+                    sys.exit(1)
+
+        except Exception as e:
+            print(f"에러 메시지: {e}")
+            traceback.print_exc()
+            sys.exit(1)
+
+    def chat_completions_all_together(self, user_content='', system_content='', temperature=0.7, num_history=0):
         if num_history < 0:
             history_range = num_history
         else:
@@ -485,7 +544,7 @@ class OpenAISession:
 def general_openai_api():
     api_method = True
 
-    max_token = 4000  # 최대 입력 토큰 수
+    max_token = 5000  # 최대 입력 토큰 수
     min_token = 512  # 최소 토큰 수 이하인 경우 인접 블록과 합침
     num_history_cnt = 3  # 과거 3개 기억하기
     temperature = 0.3
@@ -529,7 +588,7 @@ def general_openai_api():
             for idx, chunk in enumerate(chunks):
                 print(
                     f"[Start]....................................................................................................{doc.metadata['source']}   {idx + 1}/{len(chunks)}")
-                response = openai_instance.chat_completions(
+                response = openai_instance.chat_completions_stream(
                     system_content=system_prompt,
                     user_content=f"{chunk}\n\nfile name: {filename}: (Chunk {idx + 1}/{len(chunks)})\n{user_prompt}.",
                     temperature=temperature,
@@ -570,7 +629,7 @@ def general_openai_api():
                 for idx, chunk in enumerate(chunks):
                     print(
                         f"[Start]....................................................................................................{m_doc[0].metadata['source']}   {idx + 1}/{len(chunks)}")
-                    response = openai_instance.chat_completions(
+                    response = openai_instance.chat_completions_stream(
                         system_content=system_prompt,
                         user_content=f"{chunk}\n\nfile name: {filename}: (Chunk {idx + 1}/{len(chunks)})\n{user_prompt}.",
                         temperature=temperature,
@@ -635,8 +694,8 @@ def openai_assistant_api():
 
 
 if __name__ == "__main__":
-    # general_openai_api()
-    openai_assistant_api()
+    general_openai_api()
+    # openai_assistant_api()
 
 
 

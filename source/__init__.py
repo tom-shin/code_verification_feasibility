@@ -1118,68 +1118,18 @@ class LoadDirectoryThread(QThread):
 #
 
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-EXTENSION_TO_LOADER = {
-    ".py": PythonLoader,
-    ".ipynb": NotebookLoader,
-    ".txt": TextLoader,
-    ".json": JSONLoader,
-    "default": UnstructuredFileLoader,
-}
-
-
-def load_file(file_path):
-    """
-    주어진 파일 경로에 맞는 로더를 사용하여 문서를 로드합니다.
-    :param file_path: 파일 경로
-    :return: 로드된 문서 리스트
-    """
-    file_extension = os.path.splitext(file_path)[1].lower()  # 파일 확장자 추출
-
-    # 해당 확장자에 맞는 로더를 찾음
-    if file_extension in EXTENSION_TO_LOADER:
-        loader_cls = EXTENSION_TO_LOADER[file_extension]
-    else:
-        loader_cls = EXTENSION_TO_LOADER["default"]
-
-    # 파일에 맞는 로더 생성
-    loader = DirectoryLoader(os.path.dirname(file_path), glob=os.path.basename(file_path), loader_cls=loader_cls)
-
-    # 파일 로드
-    return loader.load()
-
-
-def load_files(project_dir):
-    """
-    주어진 디렉토리에서 모든 파일을 찾아, 해당 파일 확장자에 맞는 로더를 사용하여 문서를 로드하고 결합합니다.
-    :param project_dir: 프로젝트 디렉토리 경로 또는 파일 경로
-    :return: 결합된 문서 리스트
-    """
-    all_docs = []
-
-    # project_dir이 파일인지 폴더인지 확인
-    if os.path.isfile(project_dir):
-        # 파일이 주어진 경우
-        docs = load_file(project_dir)
-        all_docs.extend(docs)  # 로드된 문서들을 결합
-
-    elif os.path.isdir(project_dir):
-        # project_dir이 폴더인 경우
-        for root, dirs, files in os.walk(project_dir):
-            for file_name in files:
-                file_path = os.path.join(root, file_name)
-                docs = load_file(file_path)
-                all_docs.extend(docs)  # 로드된 문서들을 결합
-
-    else:
-        raise ValueError(f"주어진 경로가 유효한 파일 또는 디렉토리가 아닙니다: {project_dir}")
-
-    return all_docs
-
-
 class CodeAnalysisThread(QThread):
     finished_analyze_sig = pyqtSignal(str)
     chunk_analyzed_sig = pyqtSignal(str)
     analysis_progress_sig = pyqtSignal(str)
+
+    EXTENSION_TO_LOADER = {
+        ".py": PythonLoader,
+        ".ipynb": NotebookLoader,
+        ".txt": TextLoader,
+        ".json": JSONLoader,
+        "default": UnstructuredFileLoader,
+    }
 
     def __init__(self, ctrl_params):
         super().__init__()
@@ -1206,6 +1156,53 @@ class CodeAnalysisThread(QThread):
         # 세션 생성
         self.session = requests.Session()
         self.session.headers.update(self.HEADERS)
+
+    def load_file(self, file_path):
+        """
+        주어진 파일 경로에 맞는 로더를 사용하여 문서를 로드합니다.
+        :param file_path: 파일 경로
+        :return: 로드된 문서 리스트
+        """
+        file_extension = os.path.splitext(file_path)[1].lower()  # 파일 확장자 추출
+
+        # 해당 확장자에 맞는 로더를 찾음
+        if file_extension in self.EXTENSION_TO_LOADER:
+            loader_cls = self.EXTENSION_TO_LOADER[file_extension]
+        else:
+            loader_cls = self.EXTENSION_TO_LOADER["default"]
+
+        # 파일에 맞는 로더 생성
+        loader = DirectoryLoader(os.path.dirname(file_path), glob=os.path.basename(file_path), loader_cls=loader_cls)
+
+        # 파일 로드
+        return loader.load()
+
+    def load_files(self, project_dir):
+        """
+        주어진 디렉토리에서 모든 파일을 찾아, 해당 파일 확장자에 맞는 로더를 사용하여 문서를 로드하고 결합합니다.
+        :param project_dir: 프로젝트 디렉토리 경로 또는 파일 경로
+        :return: 결합된 문서 리스트
+        """
+        all_docs = []
+
+        # project_dir이 파일인지 폴더인지 확인
+        if os.path.isfile(project_dir):
+            # 파일이 주어진 경우
+            docs = self.load_file(project_dir)
+            all_docs.extend(docs)  # 로드된 문서들을 결합
+
+        elif os.path.isdir(project_dir):
+            # project_dir이 폴더인 경우
+            for root, dirs, files in os.walk(project_dir):
+                for file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    docs = self.load_file(file_path)
+                    all_docs.extend(docs)  # 로드된 문서들을 결합
+
+        else:
+            raise ValueError(f"주어진 경로가 유효한 파일 또는 디렉토리가 아닙니다: {project_dir}")
+
+        return all_docs
 
     def recursive_summarization(self, summaries):
         """
@@ -1270,7 +1267,7 @@ class CodeAnalysisThread(QThread):
             all_docs = [{"metadata": {"source": "user_input"}, "page_content": self.user_contents}]
             file_structure = "\n".join([doc['metadata']['source'] for doc in all_docs])
         else:
-            all_docs = load_files(project_dir=self.project_dir)
+            all_docs = self.load_files(project_dir=self.project_dir)
             file_structure = "\n".join([doc.metadata['source'] for doc in all_docs])
 
         # 초기 파일 구조 전달
