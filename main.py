@@ -765,11 +765,11 @@ class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
             str(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["num_history_cnt"]))
 
         if bool(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["use_dynamic_chunk_size"]):
-            self.mainFrame_ui.dynamicchunkradioButton.setEnabled(True)
+            # self.mainFrame_ui.dynamicchunkradioButton.setEnabled(True)
             self.mainFrame_ui.dynamicchunkradioButton.setChecked(True)
 
         if bool(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["use_assistant_api"]):
-            self.mainFrame_ui.assistanceradioButton.setEnabled(True)
+            # self.mainFrame_ui.assistanceradioButton.setEnabled(True)
             self.mainFrame_ui.assistanceradioButton.setChecked(True)
 
     def view_code(self):
