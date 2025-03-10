@@ -407,7 +407,7 @@ class CodeAnalysisThreadVersion2(QThread):
                 filename = doc.metadata["source"]
 
                 use_dynamic_chunk_size = False
-                if self.ctrl_params["use_dynamic_chunk_size"] and filename.endwith(".py"):
+                if self.ctrl_params["use_dynamic_chunk_size"] and filename.endswith(".py"):
                     use_dynamic_chunk_size = True
 
                 chunks = self.openai_instance.split_text(string_content=doc.page_content, f_limit_max_token=max_token,
@@ -418,7 +418,8 @@ class CodeAnalysisThreadVersion2(QThread):
                     if not self.running:
                         return previous_responses
 
-                    self.analysis_progress_sig.emit(f" {idx+1}/{len(chunks)*len(all_docs)}   '{os.path.basename(filename)}'  Analyzing...")
+                    self.analysis_progress_sig.emit(
+                        f" {idx + 1}/{len(chunks) * len(all_docs)}   '{os.path.basename(filename)}'  Analyzing...")
 
                     response = self.openai_instance.chat_completions_all_together(
                         system_content=system_prompt,
@@ -498,21 +499,21 @@ class CodeAnalysisThreadVersion2(QThread):
         print(f"\n\n Elapsed Time:  {time.time() - start} s.\n\n")
 
     def run(self):
-        # print("llm_model:", self.ctrl_params["llm_model"])
-        # print("temperature", self.ctrl_params["temperature"])
-        # print("language:", {self.ctrl_params['language']})
-        # print("num_history_cnt:", self.ctrl_params["num_history_cnt"])
-        # print(f"use_dynamic_chunk_size: {self.ctrl_params['use_dynamic_chunk_size']} --> only support .py file")
-        # print("max_limit_token:", self.ctrl_params["max_limit_token"])
-        # print("min_limit_token:", self.ctrl_params["min_limit_token"])
-        # print("project_src_file:", self.ctrl_params["project_src_file"])
-        # print("system_prompt:\n", self.ctrl_params["system_prompt"])
-        # print("user_prompt:\n", self.ctrl_params["user_prompt"])
+        print("llm_model:", self.ctrl_params["llm_model"])
+        print("temperature", self.ctrl_params["temperature"])
+        print("language:", {self.ctrl_params['language']})
+        print("num_history_cnt:", self.ctrl_params["num_history_cnt"])
+        print(f"use_dynamic_chunk_size: {self.ctrl_params['use_dynamic_chunk_size']} --> only support .py file")
+        print("max_limit_token:", self.ctrl_params["max_limit_token"])
+        print("min_limit_token:", self.ctrl_params["min_limit_token"])
+        print("project_src_file:", self.ctrl_params["project_src_file"])
+        print("system_prompt:\n", self.ctrl_params["system_prompt"])
+        print("user_prompt:\n", self.ctrl_params["user_prompt"])
 
         if self.ctrl_params["use_assistant_api"]:
             self.result = self.openai_assistant_api()  # file을 통채로 openai에 던져 주고 알아서 분석하라고 함.
         else:
-            self.result = self.openai_standard_api()    # file의 contents를 파싱, 청킹, 분석 요청 일련의 과정 수행
+            self.result = self.openai_standard_api()  # file의 contents를 파싱, 청킹, 분석 요청 일련의 과정 수행
 
         analysis_result = "\n\n".join(self.result)
         self.finished_analyze_sig.emit(analysis_result)
@@ -533,7 +534,6 @@ class CodeAnalysisThreadVersion2(QThread):
 
         self.quit()  # Quit the event loop
         self.wait()  # Wait for the thread to finish
-
 
 
 class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
@@ -571,9 +571,10 @@ class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
         # self.mainFrame_ui.explorer_frame.hide()
         self.mainFrame_ui.explore_pushButton.setText("Hide")
 
-        self.setupGPTModels()
+        self.setGPTModels()
         self.setDefaultPrompt()
         self.setDefaultUserContent()
+        self.setDefaultCtrlParams()
         self.remove_all_directory_sequentially(t_path=BASE_DIR, t_name="root_temp_")
 
         # 탐색기 뷰 추가
@@ -721,7 +722,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
 
         self.mainFrame_ui.codeview_pushButton.clicked.connect(self.view_code)
 
-    def setupGPTModels(self):
+    def setGPTModels(self):
         row = 0  # 그리드 레이아웃의 첫 번째 행
         for index, name in enumerate(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["llm_models"]):
             radio_button = QRadioButton(name)  # 라디오 버튼 생성
@@ -749,6 +750,27 @@ class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
             if radio_button.isChecked():  # 선택된 버튼을 확인                
                 PRINT_(f"Selected GPT model: {radio_button.text()}")  # 선택된 버튼의 텍스트 출력
                 return radio_button.text()
+
+    def setDefaultCtrlParams(self):
+        self.mainFrame_ui.temperaturelineEdit.setText(
+            str(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["temperature"]))
+
+        self.mainFrame_ui.maxinputlineEdit.setText(
+            str(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["max_limit_token"]))
+
+        self.mainFrame_ui.mininputlineEdit.setText(
+            str(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["min_limit_token"]))
+
+        self.mainFrame_ui.historylineEdit.setText(
+            str(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["num_history_cnt"]))
+
+        if bool(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["use_dynamic_chunk_size"]):
+            self.mainFrame_ui.dynamicchunkradioButton.setEnabled(True)
+            self.mainFrame_ui.dynamicchunkradioButton.setChecked(True)
+
+        if bool(self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["use_assistant_api"]):
+            self.mainFrame_ui.assistanceradioButton.setEnabled(True)
+            self.mainFrame_ui.assistanceradioButton.setChecked(True)
 
     def view_code(self):
         """Handle double-click event on a file in the QTreeView."""
@@ -1071,6 +1093,25 @@ class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
         PRINT_("[Info] Time Out")
         PRINT_(f"-->{timeout} s")
 
+        if self.mainFrame_ui.dynamicchunkradioButton.isChecked():
+            use_dynamic_chunk_size = True
+        else:
+            use_dynamic_chunk_size = False
+
+        if self.mainFrame_ui.assistanceradioButton.isChecked():
+            use_assistant_api = True
+        else:
+            use_assistant_api = False
+
+        if file_path is None and use_assistant_api:
+            answer = QtWidgets.QMessageBox.information(self,
+                                                       "Information ...",
+                                                       "현재 Assistance API는 파일에 대한 분석만 지원합니다",
+                                                       QtWidgets.QMessageBox.Yes)
+
+            self.mainFrame_ui.tabWidget.setCurrentIndex(0)
+            return
+
         ctrl_params = {
             "project_src_file": file_path,
             "user_contents": user_contents,
@@ -1078,14 +1119,14 @@ class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
             "user_prompt": user_prompt,
             "llm_model": llm_model,
             "llm_key": llm_key,
-            "max_limit_token": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["max_limit_token"],
-            "min_limit_token": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["min_limit_token"],
-            "use_dynamic_chunk_size": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["use_dynamic_chunk_size"],
-            "temperature": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["temperature"],
-            "num_history_cnt": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["num_history_cnt"],
+            "max_limit_token": int(self.mainFrame_ui.maxinputlineEdit.text()),
+            "min_limit_token": int(self.mainFrame_ui.mininputlineEdit.text()),
+            "temperature": float(self.mainFrame_ui.temperaturelineEdit.text()),
+            "num_history_cnt": int(self.mainFrame_ui.historylineEdit.text()),
             "timeout": int(timeout),
             "language": language,
-            "use_assistant_api": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["use_assistant_api"]
+            "use_dynamic_chunk_size": use_dynamic_chunk_size,
+            "use_assistant_api": use_assistant_api
         }
 
         if self.mainFrame_ui.popctrl_radioButton.isChecked():
