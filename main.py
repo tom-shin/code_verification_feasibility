@@ -1101,8 +1101,8 @@ class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
                                             )
         self.work_progress.progress_stop_sig.connect(self.close_progress_dialog)
 
-        self.llm_analyze_instance = CodeAnalysisThreadVersion1(ctrl_params=ctrl_params)
-        # self.llm_analyze_instance = CodeAnalysisThreadVersion2(ctrl_params=ctrl_params)
+        # self.llm_analyze_instance = CodeAnalysisThreadVersion1(ctrl_params=ctrl_params)
+        self.llm_analyze_instance = CodeAnalysisThreadVersion2(ctrl_params=ctrl_params)
 
         # self.llm_analyze_instance = RequestLLMThread(ctrl_params=ctrl_params)
 
