@@ -267,17 +267,7 @@
                   <property name="title">
                    <string>Language (Answer)</string>
                   </property>
-                  <layout class="QVBoxLayout" name="verticalLayout_16">
-                   <item>
-                    <widget class="QRadioButton" name="korean_radioButton">
-                     <property name="text">
-                      <string>Korean</string>
-                     </property>
-                     <property name="checked">
-                      <bool>false</bool>
-                     </property>
-                    </widget>
-                   </item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_6">
                    <item>
                     <widget class="QRadioButton" name="english_radioButton">
                      <property name="text">
@@ -285,6 +275,16 @@
                      </property>
                      <property name="checked">
                       <bool>true</bool>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QRadioButton" name="korean_radioButton">
+                     <property name="text">
+                      <string>Korean</string>
+                     </property>
+                     <property name="checked">
+                      <bool>false</bool>
                      </property>
                     </widget>
                    </item>
@@ -315,7 +315,7 @@
                      <item row="2" column="1">
                       <widget class="QLineEdit" name="mininputlineEdit">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -324,6 +324,12 @@
                      </item>
                      <item row="1" column="0">
                       <widget class="QLabel" name="label_9">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
                        <property name="text">
                         <string>Max Input Token</string>
                        </property>
@@ -331,6 +337,12 @@
                      </item>
                      <item row="4" column="0">
                       <widget class="QLabel" name="label_7">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
                        <property name="text">
                         <string>Dynamic Chunk</string>
                        </property>
@@ -338,6 +350,12 @@
                      </item>
                      <item row="6" column="0">
                       <widget class="QLabel" name="label">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
                        <property name="text">
                         <string>Time Out [sec.]</string>
                        </property>
@@ -345,6 +363,12 @@
                      </item>
                      <item row="3" column="0">
                       <widget class="QLabel" name="label_8">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
                        <property name="text">
                         <string>Num History</string>
                        </property>
@@ -353,7 +377,7 @@
                      <item row="0" column="1">
                       <widget class="QLineEdit" name="temperaturelineEdit">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -363,7 +387,7 @@
                      <item row="3" column="1">
                       <widget class="QLineEdit" name="historylineEdit">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -373,7 +397,7 @@
                      <item row="1" column="1">
                       <widget class="QLineEdit" name="maxinputlineEdit">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -382,6 +406,12 @@
                      </item>
                      <item row="5" column="0">
                       <widget class="QLabel" name="label_10">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
                        <property name="text">
                         <string>Use Assistance API(Beta Ver.)</string>
                        </property>
@@ -389,6 +419,12 @@
                      </item>
                      <item row="2" column="0">
                       <widget class="QLabel" name="label_6">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
                        <property name="text">
                         <string>Min Input Token</string>
                        </property>
@@ -397,7 +433,7 @@
                      <item row="6" column="1">
                       <widget class="QLineEdit" name="timeoutlineEdit">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -409,6 +445,12 @@
                      </item>
                      <item row="0" column="0">
                       <widget class="QLabel" name="label_5">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
                        <property name="text">
                         <string>Temperature</string>
                        </property>
@@ -418,6 +460,12 @@
                       <layout class="QHBoxLayout" name="horizontalLayout_3">
                        <item>
                         <widget class="QRadioButton" name="dynamicchunkradioButton">
+                         <property name="sizePolicy">
+                          <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                           <horstretch>0</horstretch>
+                           <verstretch>0</verstretch>
+                          </sizepolicy>
+                         </property>
                          <property name="text">
                           <string>Use</string>
                          </property>
@@ -435,6 +483,12 @@
                       <layout class="QHBoxLayout" name="horizontalLayout_5">
                        <item>
                         <widget class="QRadioButton" name="assistanceradioButton">
+                         <property name="sizePolicy">
+                          <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                           <horstretch>0</horstretch>
+                           <verstretch>0</verstretch>
+                          </sizepolicy>
+                         </property>
                          <property name="text">
                           <string>Use</string>
                          </property>
