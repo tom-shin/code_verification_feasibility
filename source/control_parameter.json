@@ -1,5 +1,5 @@
 {
-    "Version": "Feasibility for Code Verification 0.3.0 (made by tom.shin)",
+    "Version": "Feasibility for Code Verification 1.0.0 (made by tom.shin)",
     "select_llm": "openai",
     "llm_company": {
         "openai": {
@@ -14,7 +14,12 @@
                 "gpt-3.5-turbo"
             ],
             "timeout": "300",
-            "max_limit_token": 5000
+            "max_limit_token": 5000,
+            "min_limit_token": 512,
+            "use_dynamic_chunk_size": false,
+            "temperature": 0.4,
+            "num_history_cnt": 3,
+            "use_assistant_api": false
         },
         "reserved": {
             "key": [

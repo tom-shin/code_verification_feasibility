@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from source.__init__ import *
+from source.head import *
 
 if getattr(sys, 'frozen', False):  # PyInstaller로 패키징된 경우
     BASE_DIR = os.path.dirname(sys.executable)  # 실행 파일이 있는 폴더
@@ -10,7 +10,532 @@ else:
     RESOURCE_DIR = BASE_DIR  # 개발 환경에서는 현재 폴더 사용
 
 
-class ProjectMainWindow(QtWidgets.QMainWindow):
+class LoadDirectoryThread(QThread, FileManager):
+    finished_load_project_sig = pyqtSignal(str)  # ret, failed_pairs, memory_profile 전달
+    copy_status_sig = pyqtSignal(str, int)  # ret, failed_pairs, memory_profile 전달
+
+    def __init__(self, m_source_dir, BASE_DIR, keyword_filter):
+        super().__init__()
+        # FileManager.__init__(self)
+
+        self.running = True
+        self.filter = keyword_filter
+
+        self.src_dir = m_source_dir.replace("\\", "/")
+
+        unique_id = str(uuid.uuid4())  # 고유한 UUID 생성
+        self.target_dir = os.path.join(BASE_DIR, f"root_temp_{unique_id}", os.path.basename(self.src_dir)).replace("\\",
+                                                                                                                   "/")
+
+        self.remove_all_directory_sequentially(t_path=BASE_DIR, t_name="root_temp_")
+
+    def run(self) -> None:
+        # 코드 작성
+        self.copy_directory_structure_2()
+        self.finished_load_project_sig.emit(os.path.dirname(self.target_dir))
+
+    def copy_directory_structure_1(self):
+        if os.path.exists(self.target_dir):
+            shutil.rmtree(self.target_dir)
+
+        shutil.copytree(self.src_dir, self.target_dir)
+
+    def copy_directory_structure_2(self, exclude=False):
+        """
+        exclude=True  → 제외 리스트에 있는 항목들을 제외한 나머지를 복사 (기본)
+        exclude=False → 특정 확장자를 가진 파일이 있는 경우에만 해당 폴더를 포함하여 복사
+        """
+        filter_name = "exclude" if exclude else "include"
+
+        self.remove_create_dir(t_dir=self.target_dir)
+
+        cnt = 0
+        filter_list = self.filter  # 필터링할 단어 리스트
+
+        # `include` 모드에서 확장자 리스트 설정
+        include_mode_active = not exclude and bool(filter_list["include"])
+        include_extensions = set(filter_list["include"]) if include_mode_active else set()
+
+        for root, dirs, files in os.walk(self.src_dir):
+            if not self.running:
+                return "stop_copy_directory_structure_2"
+
+            # `exclude` 모드인 경우 폴더 필터링
+            if exclude:
+                if any(excluded_word in os.path.basename(root) for excluded_word in filter_list["exclude"]):
+                    continue
+                dirs[:] = [d for d in dirs if not any(excluded_word in d for excluded_word in filter_list["exclude"])]
+
+            # `include` 모드인 경우, 현재 폴더에 복사할 파일이 있는지 체크
+            valid_files = []
+            if include_mode_active:
+                for file in files:
+                    _, ext = os.path.splitext(file)
+                    if ext in include_extensions:
+                        valid_files.append(file)
+
+                if not valid_files:
+                    continue  # 포함할 파일이 없으면 폴더 자체를 복사하지 않음
+
+            # 현재 폴더의 상대 경로를 대상 폴더 기준으로 계산
+            relative_path = os.path.relpath(root, self.src_dir).replace("\\", "/")
+            destination_dir = os.path.join(self.target_dir, relative_path).replace("\\", "/")
+
+            if not os.path.exists(destination_dir):
+                os.makedirs(destination_dir)
+
+            # 파일 복사
+            for file in valid_files if include_mode_active else files:
+
+                if not self.running:
+                    return "stop_copy_directory_structure_2_2"
+
+                if exclude and any(excluded_word in file for excluded_word in filter_list["exclude"]):
+                    continue
+
+                source_file = os.path.join(root, file).replace("\\", "/")
+                destination_file = os.path.join(destination_dir, file).replace("\\", "/")
+                shutil.copy2(source_file, destination_file)
+
+                cnt += 1
+                self.copy_status_sig.emit(f"[{cnt}]   ../{os.path.basename(source_file)} copied", cnt)
+
+    def stop(self):
+        self.running = False
+        self.quit()
+        self.wait()
+
+
+class CodeAnalysisThreadVersion1(QThread):
+    finished_analyze_sig = pyqtSignal(str)
+    chunk_analyzed_sig = pyqtSignal(str)
+    analysis_progress_sig = pyqtSignal(str)
+
+    EXTENSION_TO_LOADER = {
+        ".py": PythonLoader,
+        ".ipynb": NotebookLoader,
+        ".txt": TextLoader,
+        ".json": JSONLoader,
+        "default": UnstructuredFileLoader,
+    }
+
+    def __init__(self, ctrl_params):
+        super().__init__()
+
+        self.cnt_1 = 0
+        self.running = True
+
+        self.llm = ctrl_params["llm_model"]
+        self.output_language = ctrl_params["language"]
+        self.max_token_limit = ctrl_params["max_limit_token"]
+        self.project_dir = ctrl_params["project_src_file"]
+        self.user_contents = ctrl_params["user_contents"]
+        self.user_prompt = ctrl_params["user_prompt"]
+        self.system_prompt = f'{ctrl_params["system_prompt"]}. respond in {self.output_language}'
+        self.num_history_cnt = ctrl_params["num_history_cnt"]
+        self.temperature = ctrl_params["temperature"]
+
+        self.OPENAI_API_KEY = ctrl_params["llm_key"]
+        self.OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+        self.HEADERS = {
+            "Authorization": f"Bearer {self.OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        # 세션 생성
+        self.session = requests.Session()
+        self.session.headers.update(self.HEADERS)
+
+    def parsed_load_file(self, file_path):
+        """
+        주어진 파일 경로에 맞는 로더를 사용하여 문서를 로드합니다.
+        :param file_path: 파일 경로
+        :return: 로드된 문서 리스트
+        """
+        file_extension = os.path.splitext(file_path)[1].lower()  # 파일 확장자 추출
+
+        # 해당 확장자에 맞는 로더를 찾음
+        if file_extension in self.EXTENSION_TO_LOADER:
+            loader_cls = self.EXTENSION_TO_LOADER[file_extension]
+        else:
+            loader_cls = self.EXTENSION_TO_LOADER["default"]
+
+        # 파일에 맞는 로더 생성
+        loader = DirectoryLoader(os.path.dirname(file_path), glob=os.path.basename(file_path), loader_cls=loader_cls)
+
+        # 파일 로드
+        return loader.load()
+
+    def parsed_load_files(self, project_dir):
+        """
+        주어진 디렉토리에서 모든 파일을 찾아, 해당 파일 확장자에 맞는 로더를 사용하여 문서를 로드하고 결합합니다.
+        :param project_dir: 프로젝트 디렉토리 경로 또는 파일 경로
+        :return: 결합된 문서 리스트
+        """
+        all_docs = []
+
+        # project_dir이 파일인지 폴더인지 확인
+        if os.path.isfile(project_dir):
+            # 파일이 주어진 경우
+            docs = self.parsed_load_file(project_dir)
+            all_docs.extend(docs)  # 로드된 문서들을 결합
+
+        elif os.path.isdir(project_dir):
+            # project_dir이 폴더인 경우
+            for root, dirs, files in os.walk(project_dir):
+                for file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    docs = self.parsed_load_file(file_path)
+                    all_docs.extend(docs)  # 로드된 문서들을 결합
+
+        else:
+            raise ValueError(f"주어진 경로가 유효한 파일 또는 디렉토리가 아닙니다: {project_dir}")
+
+        return all_docs
+
+    def recursive_summarization(self, summaries):
+        """
+        요약된 내용이 너무 크다면 다시 청크 단위로 분할하여 재귀적으로 요약하는 함수
+        """
+        if not summaries:
+            return None
+
+        # 요약 결과가 컨텍스트 제한 내라면 그대로 반환
+        total_size = sum(len(s) for s in summaries)
+
+        # 요약된 내용의 크기가 제한을 초과하지 않으면 그대로 반환
+        if total_size <= self.max_token_limit:
+            return "\n\n".join(summaries)
+
+        self.cnt_1 += 1
+        self.analysis_progress_sig.emit(f"Summarized output is too large, summarizing again...{self.cnt_1}")
+
+        # 새로 분할하여 다시 요약 요청
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=self.max_token_limit, chunk_overlap=100)
+
+        # 재귀 호출을 위해 새로운 청크 생성
+        new_chunks = text_splitter.split_text("\n\n".join(summaries))
+
+        # 분할된 청크들을 한 번에 처리할 수 있도록 다루기
+        new_summarized_parts = []
+        for idx, chunk in enumerate(new_chunks):
+            payload = {
+                "model": self.llm,
+                "messages": [
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": f"Summarize: {chunk}"}
+                ],
+                "temperature": self.temperature
+            }
+
+            response = self._send_message(payload)
+
+            if response:
+                summarized_text = response["choices"][0]["message"]["content"]
+                new_summarized_parts.append(summarized_text)
+            else:
+                self.analysis_progress_sig.emit(f"Failed to summarize chunk {idx + 1}")
+
+        # 새로운 요약된 부분의 총 크기 계산
+        new_total_size = sum(len(s) for s in new_summarized_parts)
+
+        # 요약된 부분의 크기가 줄어들지 않으면 더 이상 재귀를 하지 않음
+        print("size, ", new_total_size, total_size)
+        if new_total_size >= total_size:
+            self.analysis_progress_sig.emit("Summarized output size did not decrease, stopping recursion.")
+            return "\n\n".join(new_summarized_parts)
+
+        # 여전히 크기가 크다면 다시 재귀 호출
+        return self.recursive_summarization(new_summarized_parts)
+
+    def run(self):
+        self.analysis_progress_sig.emit("Read all File Data...")
+
+        # 프로젝트 디렉토리 내 모든 파일을 확인하고, 파일 확장자에 맞는 로더를 선택하여 파일을 로드
+        if self.project_dir is None:
+            all_docs = [{"metadata": {"source": "user_input"}, "page_content": self.user_contents}]
+            file_structure = "\n".join([doc['metadata']['source'] for doc in all_docs])
+        else:
+            all_docs = self.parsed_load_files(project_dir=self.project_dir)
+            file_structure = "\n".join([doc.metadata['source'] for doc in all_docs])
+
+        # 초기 파일 구조 전달
+        init_message = {
+            "model": f"{self.llm}",
+            "messages": [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user",
+                 "content": f"The overall code files and folder structure of the project are as follows:\n\n{file_structure}\n\nRemember this structure."}
+            ],
+        }
+        self._send_message(init_message)
+
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=self.max_token_limit, chunk_overlap=100)
+        previous_responses = []
+
+        for doc in all_docs:
+            if self.project_dir is None:
+                file_name = doc['metadata']['source']
+                content = doc['page_content']
+            else:
+                file_name = doc.metadata['source']
+                content = doc.page_content
+
+            self.analysis_progress_sig.emit(f"{file_name} Chunking...")
+            chunks = text_splitter.split_text(content)
+
+            file_responses = []
+            for idx, chunk in enumerate(chunks):
+                context_messages = [{"role": "system", "content": self.system_prompt}]
+                for prev in previous_responses[-self.num_history_cnt:]:
+                    context_messages.append({"role": "assistant", "content": prev})
+
+                context_messages.append({
+                    "role": "user",
+                    "content": f"{chunk}\n\nfile name: {file_name} (Chunk {idx + 1}/{len(chunks)})\n{self.user_prompt}."
+                })
+
+                payload = {"model": self.llm, "messages": context_messages, "temperature": self.temperature}
+                response = self._send_message(payload)
+
+                if response:
+                    result = response["choices"][0]["message"]["content"]
+                    file_responses.append(result)
+                    msg_progress = f"Finished Chunk Analysis: {file_name} (Chunk {idx + 1}/{len(chunks)})"
+                    self.analysis_progress_sig.emit(msg_progress)
+                else:
+                    self.analysis_progress_sig.emit(f"Failed to process chunk {idx + 1}")
+
+            previous_responses.extend(file_responses)
+
+        summarize_chunk_data = "\n\n".join(previous_responses)
+
+        # self.chunk_analyzed_sig.emit(summarize_chunk_data)
+
+        # # 요약 데이터가 너무 크다면 다시 분할
+        final_result = summarize_chunk_data
+        # self.analysis_progress_sig.emit("Wait for Summarizing...")
+        # final_result = self.recursive_summarization(summaries=summarize_chunk_data)
+        self.finished_analyze_sig.emit(final_result)
+
+    def stop(self):
+        """Stop the thread and close the session"""
+        self.running = False  # 종료 플래그 설정
+
+        # 세션 종료
+        self.session.close()
+
+        self.quit()  # Quit the event loop
+        self.wait()  # Wait for the thread to finish
+
+    def _send_message(self, payload):
+        """API 호출을 처리하는 내부 메서드"""
+        if not self.running:
+            self.analysis_progress_sig.emit("Terminated forcibly. Wait for normal closing")
+            return None
+
+        try:
+            response = self.session.post(self.OPENAI_API_URL, json=payload)  # 여기 수정됨!
+            if response.status_code == 200:
+
+                # print("test\n\n", response.json())
+                return response.json()
+            else:
+                # print(f"Fail to API Call: {response.status_code}, {response.text}")
+                return None
+        except requests.RequestException as e:
+            # print(f"Fail to Requesst: {e}")
+            return None
+
+
+class CodeAnalysisThreadVersion2(QThread):
+    finished_analyze_sig = pyqtSignal(str)
+    chunk_analyzed_sig = pyqtSignal(str)
+    analysis_progress_sig = pyqtSignal(str)
+
+    def __init__(self, ctrl_params):
+        super().__init__()
+        self.result = None
+        self.running = True
+        self.ctrl_params = ctrl_params
+        self.openai_instance = None
+
+    def openai_standard_api(self):
+        try:
+            all_docs = []
+            src_path = self.ctrl_params["project_src_file"]
+            max_token = self.ctrl_params["max_limit_token"]
+            min_token = self.ctrl_params["min_limit_token"]
+            system_prompt = self.ctrl_params["system_prompt"]
+            user_prompt = self.ctrl_params["user_prompt"]
+            temperature = self.ctrl_params["temperature"]
+            num_history_cnt = self.ctrl_params["num_history_cnt"]
+            language = self.ctrl_params["language"]
+
+            # FileManager에서 반환하는 객체와 유사한 구조 생성
+            Document = namedtuple("Document", ["metadata", "page_content"])
+
+            # if src_path is not None:
+            if src_path is None:
+                src_path = ''
+
+            file_instance = FileManager()
+            if file_instance.isdir_check(m_path=src_path):
+                # print("dir")
+                all_docs = file_instance.parsed_load_files(self.ctrl_params["project_src_file"])
+                file_structure = "\n".join([doc.metadata['source'] for doc in all_docs])
+
+            elif file_instance.isfile_check(m_path=src_path):
+                # print("file")
+                docs = file_instance.parsed_load_file(src_path)
+                all_docs.extend(docs)  # 로드된 문서들을 결합
+                # file_structure = "\n".join([doc.metadata['source'] for doc in all_docs])
+
+            else:  # src_path가 None인 경우
+                # print("user content")
+                # noinspection PyArgumentList
+                all_docs = [Document(metadata={"source": "user_input_context"}, page_content=user_prompt)]
+                # file_structure = "\n".join([doc.metadata["source"] for doc in all_docs])
+
+            self.openai_instance = OpenAISession(c_ctrl_params=self.ctrl_params)
+
+            previous_responses = []
+            for doc in all_docs:
+                if not self.running:
+                    return previous_responses
+
+                filename = doc.metadata["source"]
+
+                use_dynamic_chunk_size = False
+                if self.ctrl_params["use_dynamic_chunk_size"] and filename.endwith(".py"):
+                    use_dynamic_chunk_size = True
+
+                chunks = self.openai_instance.split_text(string_content=doc.page_content, f_limit_max_token=max_token,
+                                                         f_limit_min_token=min_token,
+                                                         use_defined_algorithm=use_dynamic_chunk_size)
+
+                for idx, chunk in enumerate(chunks):
+                    if not self.running:
+                        return previous_responses
+
+                    self.analysis_progress_sig.emit(f" {idx+1}/{len(chunks)*len(all_docs)}   '{os.path.basename(filename)}'  Analyzing...")
+
+                    response = self.openai_instance.chat_completions_all_together(
+                        system_content=system_prompt,
+                        user_content=f"{chunk}\n\nfile name: {filename}: (Chunk {idx + 1}/{len(chunks)})\n{user_prompt}. response in {language}",
+                        temperature=temperature,
+                        num_history=-num_history_cnt
+                    )
+                    previous_responses.append(response)
+
+            return previous_responses
+
+        except Exception as e:
+            handle_exception(e)
+
+        finally:
+            # OpenAI 세션이 None이 아니면 리소스를 해제
+            if self.openai_instance is not None:
+                try:
+                    self.openai_instance.close()
+                except Exception as e:
+                    handle_exception(e)
+                self.openai_instance = None
+
+    def openai_assistant_api(self):
+        language = self.ctrl_params["language"]
+        temperature = self.ctrl_params["temperature"]
+        system_prompt = self.ctrl_params["system_prompt"]
+        project_dir = self.ctrl_params["project_src_file"]
+        user_prompt = f'{self.ctrl_params["user_prompt"]}. response in {language}'
+
+        include = [".py", ".c", ".cpp", ".zip", ]  # 업로드할 파일 확장자 리스트
+
+        start = time.time()
+        openai_assistants_api_instance = OpenAIAssistant(c_ctrl_params=self.ctrl_params)
+
+        try:
+            file_ids = openai_assistants_api_instance.upload_files(file_paths=project_dir, include=include)
+            assistant_id = openai_assistants_api_instance.create_assistant(system_prompt=system_prompt,
+                                                                           temperature=temperature)
+
+            if assistant_id:
+                # print("Static Analysis .............................................")
+                run_id_analysis, thread_id_analysis = openai_assistants_api_instance.start_analysis(assistant_id,
+                                                                                                    file_ids,
+                                                                                                    analysis_message=user_prompt,
+                                                                                                    temperature=temperature)
+
+                if openai_assistants_api_instance.wait_for_run_completion(run_id_analysis, thread_id_analysis):
+                    result = openai_assistants_api_instance.get_run_results(run_id_analysis, thread_id_analysis)
+                    print("".join(result))
+
+                    return result
+
+                # print("Dynamic Analysis .............................................")
+                # user_prompt = "Please analyze the code dynamically and track its behavior."
+                # run_id_analysis, thread_id_analysis = openai_assistants_api_instance.start_analysis(assistant_id,
+                #                                                                                     file_ids,
+                #                                                                                     analysis_message=user_prompt,
+                #                                                                                     temperature=temperature)
+                #
+                # if openai_assistants_api_instance.wait_for_run_completion(run_id_analysis, thread_id_analysis):
+                #     result = openai_assistants_api_instance.get_run_results(run_id_analysis, thread_id_analysis)
+                #     print("".join(result))
+
+        except Exception as e:
+            """예외 처리 메서드, 파일명과 줄 번호 정보 추가"""
+            exc_type, exc_value, exc_tb = sys.exc_info()  # 예외 정보 가져오기
+            file_name = exc_tb.tb_frame.f_code.co_filename  # 예외 발생 파일명
+            line_number = exc_tb.tb_lineno  # 예외 발생 줄 번호
+
+            print(f"에러 발생 파일: {file_name}, 라인: {line_number}")
+            print(f"에러 메시지: {e}")  # 예외 메시지 출력
+            traceback.print_exc()  # 상세한 traceback 정보 출력
+            sys.exit(1)  # 강제 종료
+
+        openai_assistants_api_instance.close()
+        print(f"\n\n Elapsed Time:  {time.time() - start} s.\n\n")
+
+    def run(self):
+        # print("llm_model:", self.ctrl_params["llm_model"])
+        # print("temperature", self.ctrl_params["temperature"])
+        # print("language:", {self.ctrl_params['language']})
+        # print("num_history_cnt:", self.ctrl_params["num_history_cnt"])
+        # print(f"use_dynamic_chunk_size: {self.ctrl_params['use_dynamic_chunk_size']} --> only support .py file")
+        # print("max_limit_token:", self.ctrl_params["max_limit_token"])
+        # print("min_limit_token:", self.ctrl_params["min_limit_token"])
+        # print("project_src_file:", self.ctrl_params["project_src_file"])
+        # print("system_prompt:\n", self.ctrl_params["system_prompt"])
+        # print("user_prompt:\n", self.ctrl_params["user_prompt"])
+
+        if self.ctrl_params["use_assistant_api"]:
+            self.result = self.openai_assistant_api()  # file을 통채로 openai에 던져 주고 알아서 분석하라고 함.
+        else:
+            self.result = self.openai_standard_api()    # file의 contents를 파싱, 청킹, 분석 요청 일련의 과정 수행
+
+        analysis_result = "\n\n".join(self.result)
+        self.finished_analyze_sig.emit(analysis_result)
+
+    def stop(self):
+        self.running = False
+        # print("called code analsysis stop", self.openai_instance)
+
+        # OpenAI 세션을 안전하게 종료
+        if self.openai_instance is not None:
+            try:
+                self.openai_instance.close()
+            except Exception as e:
+                handle_exception(e)
+
+            # 세션이 종료되었으면 None으로 설정
+            self.openai_instance = None
+
+        self.quit()  # Quit the event loop
+        self.wait()  # Wait for the thread to finish
+
+
+
+class ProjectMainWindow(QtWidgets.QMainWindow, FileManager):
     def __init__(self):
         super().__init__()
 
@@ -22,7 +547,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
             original_path = os.path.join(RESOURCE_DIR, "source", "control_parameter.json")
             shutil.copyfile(original_path, control_parameter_path)
 
-        _, self.CONFIG_PARAMS = json_load_f(control_parameter_path, use_encoding=False)
+        _, self.CONFIG_PARAMS = self.json_load_f(control_parameter_path, use_encoding=False)
 
         self.llm_analyze_instance = None
         self.t_load_project = None
@@ -48,7 +573,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
         self.setupGPTModels()
         self.setDefaultPrompt()
         self.setDefaultUserContent()
-        cleanup_root_temp_folders(BASE_DIR=BASE_DIR)
+        self.remove_all_directory_sequentially(t_path=BASE_DIR, t_name="root_temp_")
 
         # 탐색기 뷰 추가
         if self.tree_view is None:
@@ -164,7 +689,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
         self.CONFIG_PARAMS["prompt"]["system"] = [system_prompt]
         # control_parameter_path = os.path.join(BASE_DIR, "source", "control_parameter.json")
         control_parameter_path = os.path.join(BASE_DIR, "control_parameter.json")
-        json_dump_f(file_path=control_parameter_path, data=self.CONFIG_PARAMS, use_encoding=False)
+        self.json_dump_f(file_path=control_parameter_path, data=self.CONFIG_PARAMS, use_encoding=False)
 
     def get_prompt(self):
         user_text = self.CONFIG_PARAMS["prompt"]["user"]
@@ -445,7 +970,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
             modal_display = True
 
         self.work_progress = ProgressDialog(modal=modal_display, message="Loading Selected Project Files", show=True,
-                                            unknown_max_limit=True)
+                                            remove_percent_sign=True)
         self.work_progress.progress_stop_sig.connect(self.close_progress_dialog)
 
         self.t_load_project = LoadDirectoryThread(m_source_dir=m_dir, BASE_DIR=BASE_DIR,
@@ -544,6 +1069,7 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
         PRINT_(f"-->{user_prompt}")
         PRINT_("[Info] Time Out")
         PRINT_(f"-->{timeout} s")
+
         ctrl_params = {
             "project_src_file": file_path,
             "user_contents": user_contents,
@@ -551,9 +1077,14 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
             "user_prompt": user_prompt,
             "llm_model": llm_model,
             "llm_key": llm_key,
-            "max_token_limit": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["max_limit_token"],
+            "max_limit_token": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["max_limit_token"],
+            "min_limit_token": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["min_limit_token"],
+            "use_dynamic_chunk_size": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["use_dynamic_chunk_size"],
+            "temperature": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["temperature"],
+            "num_history_cnt": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["num_history_cnt"],
             "timeout": int(timeout),
-            "language": language
+            "language": language,
+            "use_assistant_api": self.CONFIG_PARAMS["llm_company"][self.CONFIG_PARAMS["select_llm"]]["use_assistant_api"]
         }
 
         if self.mainFrame_ui.popctrl_radioButton.isChecked():
@@ -564,12 +1095,14 @@ class ProjectMainWindow(QtWidgets.QMainWindow):
         self.work_progress = ProgressDialog(modal=modal_display,
                                             message="Analyzing Selected Project Files",
                                             show=True,
-                                            unknown_max_limit=True,
-                                            on_count_changed_params_itself=True
+                                            remove_percent_sign=True,
+                                            progress_increment_by_self_cnt=True
                                             )
         self.work_progress.progress_stop_sig.connect(self.close_progress_dialog)
 
-        self.llm_analyze_instance = CodeAnalysisThread(ctrl_params=ctrl_params)
+        self.llm_analyze_instance = CodeAnalysisThreadVersion1(ctrl_params=ctrl_params)
+        # self.llm_analyze_instance = CodeAnalysisThreadVersion2(ctrl_params=ctrl_params)
+
         # self.llm_analyze_instance = RequestLLMThread(ctrl_params=ctrl_params)
 
         self.llm_analyze_instance.finished_analyze_sig.connect(self.llm_analyze_result)
