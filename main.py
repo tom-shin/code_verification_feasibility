@@ -367,6 +367,7 @@ class CodeAnalysisThreadVersion2(QThread):
             min_token = self.ctrl_params["min_limit_token"]
             system_prompt = self.ctrl_params["system_prompt"]
             user_prompt = self.ctrl_params["user_prompt"]
+            user_contents = self.ctrl_params["user_contents"]
             temperature = self.ctrl_params["temperature"]
             num_history_cnt = self.ctrl_params["num_history_cnt"]
             language = self.ctrl_params["language"]
@@ -393,7 +394,7 @@ class CodeAnalysisThreadVersion2(QThread):
             else:  # src_path가 None인 경우
                 # print("user content")
                 # noinspection PyArgumentList
-                all_docs = [Document(metadata={"source": "user_input_context"}, page_content=user_prompt)]
+                all_docs = [Document(metadata={"source": "user_input_context"}, page_content=user_contents)]
                 # file_structure = "\n".join([doc.metadata["source"] for doc in all_docs])
 
             self.openai_instance = OpenAISession(c_ctrl_params=self.ctrl_params)
